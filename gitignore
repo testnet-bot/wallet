@@ -31,3 +31,40 @@ coverage/
 
 # Generated files
 *.tsbuildinfo
+
+# Node dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+client/.env
+server/.env
+
+# Build output
+dist/
+build/
+
+# VSCode / IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Database / seeds
+database/migrations/
+database/*.sqlite
+
+# Coverage reports
+coverage/
+
+# TypeScript build info
+*.tsbuildinfo
