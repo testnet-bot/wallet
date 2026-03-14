@@ -444,34 +444,32 @@ border-bottom: 1px solid var(--border); padding: var(--space-sm)
         }
         }
 
-/* ─── RESPONSIVE MODE OVERRIDES ───────── */
+/* ─── MAIN CONTENT PADDING ───── */
 .main-content {
-      padding-top: var(--nav-height);
-          }
+padding-top: var(--nav-height);
+}
 
-
- @media (max-width: 768px) {
+@media (max-width: 768px) {
 .main-content {
-    padding-top: 0;
-            }
-            }
+padding-top: 0;
+}
+}
 
-
+/* ─── DESKTOP / MOBILE MODES ─── */
 .desktop-mode {
- display: flex;
- flex-direction: row;
-              }
+display: flex;
+flex-direction: row;
+}
 .desktop-mode .desktop-only {
- width: var(--sidebar-width);
- flex-shrink: 0;
-                            }
+width: var(--sidebar-width);
+flex-shrink: 0;
+}
 .desktop-mode .main-content {
-    flex: 1; 
-      min-width: 0;
-      }
+flex: 1;
+min-width: 0;
+}
 
-      .mobile-mode .main-content {
-        width: 100%; 
-          margin: 0;
-          }
-
+.mobile-mode .main-content {
+width: 100%;
+margin: 0;
+}

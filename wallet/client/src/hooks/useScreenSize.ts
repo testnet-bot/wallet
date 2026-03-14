@@ -1,26 +1,12 @@
 import { useState, useEffect } from 'react';
 
-/**
- * useScreenSize hook
- * Dynamically detects mobile/desktop based on CSS breakpoint (768px)
- */
 export function useScreenSize() {
-  const [isMobile, setIsMobile] = useState(false);
+const [isMobile, setIsMobile] = useState(() => window.innerWidth <= 768);
 
-  useEffect(() => {
-    const mediaQuery = window.matchMedia('(max-width: 768px)');
-
-    // Update state based on media query
-    const handleResize = () => setIsMobile(mediaQuery.matches);
-
-    mediaQuery.addEventListener('change', handleResize);
-
-    // Initial check
-    handleResize();
-
-    // Cleanup listener on unmount
-    return () => mediaQuery.removeEventListener('change', handleResize);
+useEffect(() => {
+const handleResize = () => setIsMobile(window.innerWidth <= 768);
+window.addEventListener('resize', handleResize);
+return () => window.removeEventListener('resize', handleResize);
   }, []);
-
   return { isMobile };
-}
+  }
