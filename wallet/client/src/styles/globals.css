@@ -420,18 +420,21 @@ border-bottom: 1px solid var(--border); padding: var(--space-sm)
 .topnav {
   padding-top: 84px; /* or whatever looks good */
       }
-
-.mobile-mode .desktop-only {
-  display: none !important;
-  }
-
-  .desktop-mode .mobile-only {
-  display: none !important;
-    }
+.desktop-mode {
+ display: flex;
+ flex-direction: row;
+              }
+.desktop-mode .desktop-only {
+ width: var(--sidebar-width);
+ flex-shrink: 0;
+                            }
 .desktop-mode .main-content {
- margin-left: var(--sidebar-width);
+    flex: 1; 
+      min-width: 0;
       }
 
- .mobile-mode .main-content {
- margin-left: 0;
-        }
+      .mobile-mode .main-content {
+        width: 100%; 
+          margin: 0;
+          }
+

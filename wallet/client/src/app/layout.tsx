@@ -138,7 +138,7 @@ export default function Layout() {
   <div
     key={isMobile ? 'mobile' : 'desktop'}
     className={isMobile ? 'mobile-mode app-shell' : 'desktop-mode app-shell'}
-    style={{ width: '100vw', minHeight: '100vh' }}
+    style={{ width: '100%', minHeight: '100%', display: 'flex', flexDirection: 'row' }}
       >
       
       {/* Sidebar for desktop */}
