@@ -133,14 +133,14 @@ export default function Layout() {
 
   return (
    <div className={isMobile ? 'mobile-mode app-shell' : 'desktop-mode app-shell'}>
-   {!isMobile && <Sidebar walletAddress={walletAddress} />}
+  {!isMobile && <Sidebar className="desktop-only" walletAddress={walletAddress} />}
       <div className="main-content">
          <Navbar scrolled={scrolled} walletAddress={walletAddress} isMobile={isMobile} />
             <PageContainer>
                 <Outlet />
                   </PageContainer>
                   </div>
-   {isMobile && <MobileTabBar />}
+   {isMobile && <MobileTabBar className="mobile-only" />}
     </div>
   );
 }

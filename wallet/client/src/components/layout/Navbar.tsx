@@ -27,8 +27,7 @@ const NAV_ITEMS = [
         <div className="topnav-brand">WALLET INTELLIGENCE PROTOCOL</div>
 
         {/* Desktop Links */}
-        {!isMobile && (
-          <div className="topnav-links flex gap-md">
+       {!isMobile && ( <div className="topnav-links flex gap-md desktop-only">
             {NAV_ITEMS.map(({ to, label }) => (
               <NavLink
                 key={to}
@@ -58,29 +57,29 @@ const NAV_ITEMS = [
           )}
 
           {/* Mobile Hamburger */}
-          {isMobile && (
-            <button
-              className="hamburger"
-              onClick={() => setMobileOpen(!mobileOpen)}
-              aria-label="Toggle menu"
-            >
-              <span className="hamburger-line" />
-              <span className="hamburger-line" />
-              <span className="hamburger-line" />
-            </button>
+  {isMobile && (
+    <button
+    className="hamburger mobile-only"
+    onClick={() => setMobileOpen(!mobileOpen)}
+    aria-label="Toggle menu"
+    >
+    <span className="hamburger-line" />
+    <span className="hamburger-line" />
+    <span className="hamburger-line" />
+    </button>
           )}
         </div>
       </div>
 
       {/* Mobile Menu */}
-      {isMobile && mobileOpen && (
-        <div className="mobile-menu flex flex-col gap-sm">
-          {NAV_ITEMS.map(({ to, label }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) => `mobile-menu-item ${isActive ? 'active' : ''}`}
-              onClick={() => setMobileOpen(false)}
+  {isMobile && mobileOpen && (
+      <div className="mobile-menu mobile-only flex flex-col gap-sm">
+      {NAV_ITEMS.map(({ to, label }) => (
+      <NavLink
+      key={to}
+      to={to}
+      className={({ isActive }) => `mobile-menu-item ${isActive ? 'active' : ''}`}
+      onClick={() => setMobileOpen(false)}
             >
               {label}
             </NavLink>

@@ -315,7 +315,7 @@ radial-gradient(circle, rgba(0, 232, 122, 0.06) 0%, transparent
   display: flex;
   justify-content: center;
   align-items: center;
-  padding: 1in 0;
+  padding: 0 var(--space-xl);
   height: var(--nav-height);
   position: sticky;
   top: 0;
@@ -370,7 +370,8 @@ radial-gradient(circle, rgba(0, 232, 122, 0.06) 0%, transparent
     }
     .mobile-menu {
     position: absolute;
-    top: calc(var(--nav-height) + 1in);
+    top: var(--nav-height);
+    position: absolute;
     right: 0;
     background: var(--bg-base);
     width: 200px;
@@ -409,10 +410,15 @@ var(--space-sm); }
 border-bottom: 1px solid var(--border); padding: var(--space-sm) 
 0; } 
 .stat-rail-item:last-child { border-bottom: none; } }
+@media (max-width: 1024px) {
+  .topnav {
+  padding: 0 var(--space-md);
+        }
+        }
 
 /* ─── RESPONSIVE MODE OVERRIDES ───────── */
 .topnav {
-      padding-top: 84px; /* or whatever looks good */
+  padding-top: 84px; /* or whatever looks good */
       }
 
 .mobile-mode .desktop-only {
@@ -420,5 +426,12 @@ border-bottom: 1px solid var(--border); padding: var(--space-sm)
   }
 
   .desktop-mode .mobile-only {
-    display: none !important;
+  display: none !important;
     }
+.desktop-mode .main-content {
+ margin-left: var(--sidebar-width);
+      }
+
+ .mobile-mode .main-content {
+ margin-left: 0;
+        }
