@@ -86,6 +86,17 @@ export default function LandingPage() {
           return () => observer.disconnect();
   }, []);
  
+  useEffect(() => {
+    const existing = document.getElementById('landing-styles');
+    if (!existing) {
+    const style = document.createElement('style');
+    style.id = 'landing-styles';
+    style.textContent = pageStyles;
+    document.head.appendChild(style);
+    }
+    }, []);
+
+
  return (
   <div className="snap-container" ref={containerRef}>
   {/* ── HERO SECTION ─────── */}
@@ -195,7 +206,7 @@ export default function LandingPage() {
           </div>
 
           {/* Terminal log preview (Zerion DNA) */}
-   /*       <div className="terminal-preview card">
+         <div className="terminal-preview card">
             <div className="terminal-header">
               <div className="terminal-dot red" />
               <div className="terminal-dot amber" />
@@ -308,7 +319,6 @@ export default function LandingPage() {
 
 const pageStyles = `
 /* ─── HERO ─── */
-/*
 
 .hero-section {
 background: var(--bg-base);
@@ -378,7 +388,7 @@ background: var(--text-secondary);
 animation: float 2s ease-in-out infinite;
 }
 
-/* ─── SECTIONS ─── 
+/* ─── SECTIONS ───*/
 .section-inner {
 max-width: var(--content-max);
 width: 100%;
@@ -413,7 +423,7 @@ max-width: 480px;
 
 .section-ctas { display: flex; gap: var(--space-md); flex-wrap: wrap; }
 
-/* ─── FEATURES ─── 
+/* ─── FEATURES ───*/
 .features-section { background: var(--bg-base); }
 
 .features-grid {
@@ -467,7 +477,7 @@ border-top: 1px solid var(--border);
 font-size: 20px;
 }
 
-/* ─── TERMINAL ─── 
+/* ─── TERMINAL ───*/
 .automation-section { background: var(--bg-base); }
 
 .terminal-preview {
@@ -533,7 +543,7 @@ animation: breathe 1.2s ease-in-out infinite;
 margin-top: var(--space-sm);
 }
 
-/* ─── SCORE SECTION ─── 
+/*── SCORE SECTION ───*/
 .health-section { background: var(--bg-base); }
 
 .score-display-wrapper { flex: 1; }
@@ -582,7 +592,7 @@ gap: var(--space-md);
 .score-label { font-size: 13px; color: var(--text-secondary); }
 .score-pct   { font-size: 13px; font-family: var(--font-mono); text-align: right; }
 
-/* ─── CTA ─── 
+/* ─── CTA ───*/
 .cta-section {
 background: var(--bg-base);
 align-items: center;
@@ -612,7 +622,7 @@ max-width: 520px;
 
 .cta-chains { display: flex; gap: var(--space-sm); flex-wrap: wrap; justify-content: center; }
 
-/* ─── SECTION DOTS ─── 
+/* ─── SECTION DOTS ───*/
 .section-dots {
 position: fixed;
 right: var(--space-xl);
@@ -637,7 +647,7 @@ background: var(--accent);
 transform: scale(1.4);
 }
 
-/* ─── RESPONSIVE ── 
+/* ─── RESPONSIVE ── */
 @media (max-width: 1024px) {
 .features-grid { grid-template-columns: repeat(2, 1fr); }
 .section-inner.two-col,
@@ -654,12 +664,3 @@ transform: scale(1.4);
 .cta-actions { flex-direction: column; align-items: center; }
 }
 `;
-useEffect(() => {
-    const existing = document.getElementById('landing-styles');
-    if (!existing) {
-    const style = document.createElement('style');
-    style.id = 'landing-styles';
-    style.textContent = pageStyles;
-    document.head.appendChild(style);
-                    }
-            }, []);   
