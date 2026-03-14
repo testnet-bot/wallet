@@ -88,13 +88,13 @@ export default function LandingPage() {
  
  return (
   <div className="snap-container" ref={containerRef}>
-  { /* ── HERO SECTION ─────── */ }
+  {/* ── HERO SECTION ─────── */}
       <section className="snap-section hero-section" data-index="0">
         <div className="bg-mesh" />
         <div className="hero-grid-bg" />
 
         <div className="hero-content">
-          /* Eyebrow */
+          {/* Eyebrow */}
          <p className="label-eyebrow anim-fade-up delay-1">
             Wallet Intelligence Protocol
           </p>
@@ -110,7 +110,7 @@ export default function LandingPage() {
             <span className="hero-line-4">VALUE.</span>
           </h1>
 
-         { /* Tesla 2-CTA pattern */}
+         {/* Tesla 2-CTA pattern */}
         <div className="hero-ctas anim-fade-up delay-3">
             <button className="btn btn-primary">
               Connect Wallet
@@ -219,7 +219,7 @@ export default function LandingPage() {
       {/* ── HEALTH SCORE SECTION ───── */}
       <section className="snap-section health-section" data-index="3">
         <div className="section-inner two-col reverse">
-          /* Zerion-style score display */
+          {/* Zerion-style score display */}
         <div className="score-display-wrapper">
             <div className="score-card card">
               <p className="label-eyebrow">Wallet Health Score</p>

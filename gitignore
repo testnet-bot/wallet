@@ -76,3 +76,32 @@ wallet/client/node_modules/
 wallet/client/dist/
 wallet/client/dist
 walllet/client/node_modules/
+
+# Node modules
+node_modules/
+
+# Vite build output
+dist/
+
+# Vite cache
+.vite/
+node_modules/.vite/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment files (may contain secrets)
+.env
+.env.*
+!.env.example
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
