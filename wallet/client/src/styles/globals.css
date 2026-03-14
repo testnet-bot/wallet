@@ -411,6 +411,10 @@ border-bottom: 1px solid var(--border); padding: var(--space-sm)
 .stat-rail-item:last-child { border-bottom: none; } }
 
 /* ─── RESPONSIVE MODE OVERRIDES ───────── */
+.topnav {
+      padding-top: 16px; /* or whatever looks good */
+      }
+
 .mobile-mode .desktop-only {
   display: none !important;
   }

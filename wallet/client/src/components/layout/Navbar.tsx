@@ -5,7 +5,8 @@ import '../../styles/animations.css';
 
 interface NavbarProps {
    walletAddress: string | null;
-   isMobile?: boolean;
+   isMobile: boolean;
+   scrolled: boolean;
         }
 
 const NAV_ITEMS = [
@@ -15,7 +16,7 @@ const NAV_ITEMS = [
   { to: '/settings', label: 'Settings' },
 ];
 
-export default function Navbar({ walletAddress }: NavbarProps) {
+export default function Navbar({ walletAddress, isMobile }: NavbarProps) { 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
 
@@ -29,7 +30,7 @@ export default function Navbar({ walletAddress }: NavbarProps) {
   }, []);
 
   return (
-    <header className={`topnav ${scrolled ? 'scrolled' : ''}`} style={{ paddingTop: '1in' }}>
+    <header className={`topnav ${scrolled ? 'scrolled' : ''}`}>
       <div className="topnav-inner flex justify-between items-center w-full">
 
         {/* Brand */}
