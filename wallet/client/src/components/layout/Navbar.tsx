@@ -21,7 +21,7 @@ const NAV_ITEMS = [
 
   return (
     <header className={`topnav ${scrolled ? 'scrolled' : ''}`}>
-      <div className="topnav-inner flex justify-between items-center w-full">
+   <div className="topnav-inner flex justify-between items-center w-full">
 
         {/* Brand */}
         <div className="topnav-brand">WALLET INTELLIGENCE PROTOCOL</div>
