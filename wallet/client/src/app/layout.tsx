@@ -6,6 +6,12 @@ import "../styles/dashboard.css";
 import { NAV_ITEMS } from '../components/layout/Navbar';
 import PageContainer from '../components/layout/PageContainer';
 import { useScreenSize } from '../hooks/useScreenSize';
+import ConnectWallet from '../components/wallet/ConnectWallet';
+import WalletStatus from '../components/wallet/WalletStatus';
+import WalletAddress from '../components/wallet/WalletAddress';
+import WalletTransactions from '../components/wallet/WalletTransactions';
+import WalletScanner from '../components/wallet/WalletScanner';
+
 
 export default function Layout() {
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
@@ -107,26 +113,27 @@ export default function Layout() {
         <Outlet />
           </div>
           </PageContainer>
-    {/* ─── WALLET OVERLAY ─── */}
-    {walletOpen && (
-    <div
-    className="wallet-overlay fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
-    onClick={() => setWalletOpen(false)} // click outside closes modal
-    >
-    <div
-    className="wallet-modal bg-bg-base p-6 rounded-lg relative"
-    onClick={(e) => e.stopPropagation()} // clicking inside DOESN'T close modal
-    >
-    <ConnectWallet
-    onConnect={(addr: string) => setWalletAddress(addr)} // update your wallet address
-    />
-    <WalletStatus account={walletAddress} />
-    <WalletAddress account={walletAddress} />
-    <WalletTransactions account={walletAddress} />
-    <WalletScanner account={walletAddress} />
-    </div>
-    </div>
-    )}
+   {/* ─── WALLET OVERLAY ─── */}
+   {walletOpen && (
+   <div
+   className="wallet-overlay fixed inset-0 bg-black/50 z-50 flex items-center justify-center"
+   onClick={() => setWalletOpen(false)}
+   >
+   <div
+   className="wallet-modal bg-bg-base p-6 rounded-lg relative"
+   onClick={(e) => e.stopPropagation()}
+   >
+   <ConnectWallet onConnect={(addr: string) => setWalletAddress(addr)} />
+   <WalletStatus 
+   connected={!!walletAddress} 
+   account={walletAddress} 
+   />
+   <WalletAddress account={walletAddress} />
+   <WalletTransactions account={walletAddress} />
+   <WalletScanner account={walletAddress} connected={!!walletAddress} />
+   </div>
+   </div>
+   )}
      </div>
   );
 }

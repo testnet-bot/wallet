@@ -11,6 +11,10 @@ import {
   type Transaction
 } from "viem"
 
+ interface WalletTransactionsProps {
+    account: string | null;
+    }
+
 /* ---------- TYPES & INTERFACES ---------- */
 interface Threat {
   id: string
@@ -70,7 +74,7 @@ function calculateRiskScore(events: any[]) {
 }
 
 /* ---------- COMPONENT ---------- */
-export default function WalletTransactions() {
+export default function WalletTransactions({ account }: WalletTransactionsProps) {
   const { address, chain } = useAccount()
   const config = useConfig()
 

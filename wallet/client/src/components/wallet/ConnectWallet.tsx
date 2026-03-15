@@ -6,7 +6,12 @@ import WalletScanner from './WalletScanner'
 import WalletStatus from './WalletStatus'
 import WalletTransactions from './WalletTransactions'
 
-export default function ConnectWallet() {
+interface ConnectWalletProps {
+    onConnect: (addr: string) => void;
+    }
+
+
+export default function ConnectWallet({ onConnect }: ConnectWalletProps) {
   // 1. Core Wagmi Hooks (v2 Standard)
   const { address, isConnected, chain, status: accountStatus } = useAccount()
   const { connect, connectors, error: connectError, isPending } = useConnect()
@@ -82,8 +87,9 @@ export default function ConnectWallet() {
   useEffect(() => {
     if (isConnected && address && !signature) {
       handleSignature()
+      onConnect(address);
     }
-  }, [isConnected, address, signature, handleSignature])
+  }, [isConnected, address, signature, handleSignature, onConnect]);
   /* WALLET RECONNECT RECOVERY */
   useEffect(() => {
     const lastWallet = localStorage.getItem("lastWallet")
@@ -140,7 +146,7 @@ export default function ConnectWallet() {
               stayConnected={stayConnected}
               onDisconnect={handleDisconnect}
             />
-           <WalletTransactions />
+           <WalletTransactions account={address} />
           </div>
 
           {/* 6. Robust Session Controls */}

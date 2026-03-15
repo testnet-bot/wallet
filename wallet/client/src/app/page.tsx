@@ -1,13 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 
 
-import ConnectWallet from '../components/wallet/ConnectWallet';
-import WalletStatus from '../components/wallet/WalletStatus';
-import WalletAddress from '../components/wallet/WalletAddress';
-import WalletTransactions from '../components/wallet/WalletTransactions';
-import WalletScanner from '../components/wallet/WalletScanner';
-
-
 const FEATURES = [
   {
   id: 'dust',
