@@ -28,9 +28,10 @@ export default function TokenList() {
         `http://localhost:3001/tokens/list?walletAddress=${address}`
         );
 
-        const erc20s = await res.json();
-   
+     if (!res.ok) throw new Error("API error");
 
+     const erc20s = await res.json();
+   
       const nativeItem = native ? [{
         id: 'native',
         symbol: native.symbol,
@@ -122,7 +123,7 @@ export default function TokenList() {
               <div className="token-info">
                 <div className="token-name">{token.name}</div>
                 <div className="token-meta">
-                  <span className={`chain-badge chain-${token.chain}`}>
+               <span className={`chain-badge chain-${token.chainLabel}`}>
                     <span className="chain-dot" />
                     {token.chainLabel}
                   </span>
