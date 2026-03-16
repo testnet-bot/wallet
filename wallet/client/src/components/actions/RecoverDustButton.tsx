@@ -1,37 +1,35 @@
 import React, { useState } from 'react';
+import { recoverDust } from '../../services/walletService';
 
-interface RecoverDustButtonProps {
-  count: number;
-  disabled?: boolean;
+interface Props {
+  walletAddress: string;
   onSuccess?: () => void;
 }
 
-export default function RecoverDustButton({ count, disabled = false, onSuccess }: RecoverDustButtonProps) {
+export default function RecoverDustButton({ walletAddress, onSuccess }: Props) {
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleClick = async () => {
-    if (disabled || loading) return;
-
+  const handleRecover = async () => {
     setLoading(true);
+    setError(null);
     try {
-      // Simulate recovery process — replace with real API call later
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      onSuccess?.(); // Notify parent RecoveryPage
-    } catch (err) {
-      console.error('Recover dust failed', err);
+      const result = await recoverDust(walletAddress);
+      if (result.error) throw new Error('Recovery failed');
+      onSuccess?.();
+    } catch (err: any) {
+      setError(err.message || 'Recovery failed');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <button
-      className={`btn btn-primary btn-sm ${loading ? 'loading' : ''}`}
-      disabled={disabled || loading}
-      onClick={handleClick}
-    >
-      {loading ? 'Recovering...' : `Recover Dust (${count})`}
-    </button>
+    <div>
+      <button onClick={handleRecover} disabled={loading}>
+        {loading ? 'Recovering...' : 'Recover Dust'}
+      </button>
+      {error && <p className="error-text">{error}</p>}
+    </div>
   );
 }
