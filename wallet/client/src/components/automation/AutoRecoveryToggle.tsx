@@ -74,46 +74,43 @@ defaultConfig = {},
 stats = DEFAULT_STATS,
 onChange
 }: AutoRecoveryToggleProps) {
-const [config, setConfig] = useState<AutoRecoveryConfig>({
-...DEFAULT_CONFIG,
-...defaultConfig
-})
+
+const [enabled, setEnabled] = useState<boolean>(DEFAULT_CONFIG.enabled)
+const [schedule, setSchedule] = useState<Schedule>(DEFAULT_CONFIG.schedule)
+const [minDustUsd, setMinDustUsd] = useState<number>(DEFAULT_CONFIG.minDustUsd)
+const [targetToken, setTargetToken] = useState<string>(DEFAULT_CONFIG.targetToken)
+const [autoCompound, setAutoCompound] = useState<boolean>(DEFAULT_CONFIG.autoCompound)
+
 const [expanded, setExpanded] = useState(false)
 
-const update = (partial: Partial<AutoRecoveryConfig>) => {
-const next = { ...config, ...partial }
-setConfig(next)
-onChange?.(next)
-}
-
-const toggleEnabled = () => update({ enabled: !config.enabled })
+const toggleEnabled = () => Date({ enabled: !enabled })
 
 return (
-<div className={`art-wrapper ${config.enabled ? 'art--on' : 'art--off'}`}>
+<div className={`art-wrapper ${enabled ? 'art--on' : 'art--off'}`}>
 <div className="art-top-row">
 <div className="art-icon-wrap">
 <span className="art-icon">◈</span>
-{config.enabled && <div className="art-icon-pulse" />}
+{enabled && <div className="art-icon-pulse" />}
 </div>
 <div className="art-title-block">
 <span className="art-title">Auto Dust Recovery</span>
-<span className={`art-status ${config.enabled ? 'art-status--on' : 'art-status--off'}`}>
-      {config.enabled
-       ? `Running ${SCHEDULES.find(s => s.id === config.schedule)?.label.toLowerCase()}`
+<span className={`art-status ${enabled ? 'art-status--on' : 'art-status--off'}`}>
+      {enabled
+       ? `Running ${SCHEDULES.find(s => s.id === schedule)?.label.toLowerCase()}`
       : 'Paused click to enable'}
        </span>
 </div>
 <button
-className={`toggle-track ${config.enabled ? 'on' : ''}`}
+className={`toggle-track ${enabled ? 'on' : ''}`}
 onClick={toggleEnabled}
-aria-label={config.enabled ? 'Disable auto recovery' : 'Enable auto recovery'}
+aria-label={enabled ? 'Disable auto recovery' : 'Enable auto recovery'}
 style={{ border: 'none', cursor: 'pointer', flexShrink: 0 }}
 >
 <div className="toggle-thumb" />
 </button>
 </div>
 
-{config.enabled && (
+{enabled && (
 <div className="art-stats-row">
 <div className="art-stat">
 <span className="art-stat-val mono-value pnl-positive">
@@ -158,14 +155,15 @@ aria-expanded={expanded}
 <span className="art-config-desc">How often to scan and recover dust</span>
 </div>
  <div className="art-chip-group">
-     {SCHEDULES.map(s => (
-      <button
-       key={s.id}
-        className={`art-chip ${config.schedule === s.id ? 'art-chip--active' : ''}`}
-        onClick={() => update({ schedule: s.id })}disabled={!config.enabled}
-        >
-        {s.label}
-        </button>
+ {SCHEDULES.map(s => (
+    <button
+    key={s.id}
+    className={`art-chip ${schedule === s.id ? 'art-chip--active' : ''}`}
+    onClick={() => setSchedule(s.id)}
+    disabled={!enabled}
+    >
+    {s.label}
+    </button>
     ))}
     </div>
 </div>
@@ -176,15 +174,16 @@ aria-expanded={expanded}
 <span className="art-config-desc">Only recover tokens worth at least this much</span>
 </div>
 <div className="art-chip-group">
-    {MIN_DUST_OPTIONS.map(val => (
+{MIN_DUST_OPTIONS.map(val => (
     <button
     key={val}
-    className={`art-chip ${config.minDustUsd === val ? 'art-chip--active' : ''}`}
-    onClick={() => update({ minDustUsd: val })}disabled={!config.enabled}
+    className={`art-chip ${minDustUsd === val ? 'art-chip--active' : ''}`}
+    onClick={() => setMinDustUsd(val)}
+    disabled={!enabled}
     >
     ${val.toFixed(2)}
     </button>
-))}
+    ))}
 </div>
 </div>
 
@@ -195,15 +194,15 @@ aria-expanded={expanded}
 </div>
 <div className="art-chip-group">
 {TARGET_TOKENS.map(tok => (
-<button
-key={tok}
-className={`art-chip art-chip--mono ${config.targetToken === tok ? 'art-chip--active' : ''}`}
-onClick={() => update({ targetToken: tok })}
-disabled={!config.enabled}
->
-{tok}
-</button>
-))}
+    <button
+    key={tok}
+    className={`art-chip art-chip--mono ${targetToken === tok ? 'art-chip--active' : ''}`}
+    onClick={() => setTargetToken(tok)}
+    disabled={!enabled}
+    >
+    {tok}
+    </button>
+    ))}
 </div>
 </div>
 
@@ -213,10 +212,10 @@ disabled={!config.enabled}
 <span className="art-config-desc">Re-stake recovered value immediately after recovery</span>
 </div>
 <button
-className={`toggle-track ${config.autoCompound ? 'on' : ''}`}
-onClick={() => update({ autoCompound: !config.autoCompound })}
-disabled={!config.enabled}
-style={{ border: 'none', cursor: config.enabled ? 'pointer' : 'not-allowed', opacity: config.enabled ? 1 : 0.4 }}
+className={`toggle-track ${autoCompound ? 'on' : ''}`}
+onClick={() => update({ autoCompound: !autoCompound })}
+disabled={!enabled}
+style={{ border: 'none', cursor: enabled ? 'pointer' : 'not-allowed', opacity: enabled ? 1 : 0.4 }}
 >
 <div className="toggle-thumb" />
 </button>
