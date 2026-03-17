@@ -1,7 +1,9 @@
+
+
 import React, { useState, useEffect, useMemo } from 'react';
 import RecoverDustButton from '../../components/actions/RecoverDustButton';
 import BatchBurnButton from '../../components/actions/BatchBurnButton';
-import SweepSpamButton from '../../components/actions/SweepSpamButton';
+ import SweepSpamButton from '../../components/actions/SweepSpamButton';
 import WalletHealthCard from '../../components/dashboard/WalletHealthCard';
 import DustSummary from '../../components/dashboard/DustSummary';
 import "../../styles/components.css";
@@ -9,7 +11,7 @@ import { useTokens } from '../../hooks/useTokens';
 import TokenList from '../../components/dashboard/TokenList';
 import { executeManualSwap, executeAutoSwap } from '../../services/tokenService';
 
-// ─── TYPES ────────────────────────────────────────────────────────────
+// ─── TYPES ─────────
 type ItemType = 'all' | 'dust' | 'spam' | 'zero';
 
 interface RecoveryItem {
@@ -25,14 +27,17 @@ interface RecoveryItem {
   logo?: string;
 }
 
-// ─── COMPONENT ────────────────────────────────────────────────────────
+// ─── COMPONENT ──────
 interface RecoveryPageProps {
   walletAddress?: string;
   nftHolder?: boolean;
 }
 
 export default function RecoveryPage({ walletAddress, nftHolder = false }: RecoveryPageProps) {
+ 
+
   const { tokens, refresh } = useTokens();
+  console.log("Tokens:", tokens);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   
   // NFT Auto-Swap
@@ -44,7 +49,7 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
 
   const allVisibleSelected = tokens.length > 0 && tokens.every(t => selected.has(t.id));
 
-  // ── Derived Values ────────────────────────────────────────────────
+  // ── Derived Values ─────────
   const selectedItems = tokens.filter(t => selected.has(t.id));
   const selectedValue = selectedItems.reduce((sum, t) => sum + t.usdValue, 0);
   const dustTotal = dustTokens.reduce((sum, t) => sum + t.usdValue, 0);
@@ -59,7 +64,7 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
   const selectAll = () => setSelected(new Set(tokens.map(t => t.id)));
   const clearAll = () => setSelected(new Set());
 
-  // ── Batch Burn Setup ─────────────────────────────────────────────
+  // ── Batch Burn Setup ──────
   const batchTokens = spamTokens
     .filter(t => selected.has(t.id) || selected.size === 0)
     .map(t => ({
@@ -80,7 +85,7 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
     ]);
   };
 
-  // ── NFT Auto-Swap Effect ─────────────────────────────────────────
+  // ── NFT Auto-Swap Effect ───────
   useEffect(() => {
    if (!autoSwapEnabled || !nftHolder || !walletAddress) return;
 
@@ -109,14 +114,15 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
     }
   };
 
-  return (
+  return ( 
     <div className="recovery-page">
-
-      {/* ── HEADER CARDS ────────────────────────────────────────── */}
+  <div>Recovery Page Loaded. Tokens: {tokens.length}</div>;
+      {/* ── HEADER CARDS ───── */}
       <div className="recovery-header grid grid-cols-1 md:grid-cols-2 gap-4">
-       <WalletHealthCard tokens={tokens} />
+    <WalletHealthCard tokens={tokens} /> 
        <DustSummary/>
-      </div>
+      </div> 
+      */
 
       {/* NFT Auto-Swap Toggle */}
       {nftHolder && (
@@ -146,7 +152,7 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
         </div>
       )}
 
-      {/* ── TOKEN LIST ───────────────────────────────────────────── */}
+      {/* ── TOKEN LIST ────── */}
       <div className="recovery-tokenlist my-6">
         <TokenList
           selectable
@@ -155,10 +161,10 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
         />
       </div>
 
-      {/* ── BATCH BURN ───────────────────────────────────────────── */}
+      {/* ── BATCH BURN ─────── */}
       {batchTokens.length > 0 && (
         <div className="recovery-batchburn mt-4">
-          <BatchBurnButton
+        <BatchBurnButton 
             tokens={batchTokens}
             onProgress={handleBatchProgress}
             onComplete={() => {
@@ -169,14 +175,14 @@ export default function RecoveryPage({ walletAddress, nftHolder = false }: Recov
         </div>
       )}
 
-      {/* ── LIVE BURN PROGRESS ───────────────────────────────────── */}
+      {/* ── LIVE BURN PROGRESS ───── */}
       {burningToken && (
         <div className="burn-progress my-2 p-2 bg-yellow-50 rounded border border-yellow-200 text-yellow-800">
           Burning <strong>{burningToken}</strong>…
         </div>
       )}
 
-      {/* ── BATCH LOG ────────────────────────────────────────────── */}
+      {/* ── BATCH LOG ─────── */}
       {burnLog.length > 0 && (
         <div className="burn-log mt-4 p-2 bg-gray-50 rounded border border-gray-200 text-gray-700 max-h-48 overflow-y-auto font-mono text-sm">
           {burnLog.map((line, idx) => <div key={idx}>{line}</div>)}

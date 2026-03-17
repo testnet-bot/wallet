@@ -1,40 +1,63 @@
-import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
+import axios, {
+  AxiosInstance,
+  AxiosResponse,
+  AxiosRequestHeaders,
+  InternalAxiosRequestConfig
+} from "axios";
 
-// Base URL from environment or default
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000/api";
+// ─── SAFELY DETERMINE BASE_URL ─────────────────────────────
+let BASE_URL = "http://localhost:4000/api";
 
-/**
- * Create a reusable axios instance for all API calls
- * Handles base URL, timeouts, headers, and can include auth token
- */
+try {
+  // Node / Jest environment fallback
+  if (typeof process !== "undefined" && process.env?.VITE_API_BASE) {
+    BASE_URL = process.env.VITE_API_BASE;
+  }
+  // Browser / Vite environment
+  else if (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE) {
+    BASE_URL = import.meta.env.VITE_API_BASE;
+  }
+} catch (e) {
+  console.warn("BASE_URL fallback used:", BASE_URL);
+}
+
+// ─── AXIOS INSTANCE ─────────────────────────────
 const apiClient: AxiosInstance = axios.create({
   baseURL: BASE_URL,
-  timeout: 15000, // 15 seconds
+  timeout: 15000,
   headers: {
     "Content-Type": "application/json",
   },
 });
 
-// Optional: Request interceptor (e.g., add auth token dynamically)
+// ─── REQUEST INTERCEPTOR ────────────────────────
 apiClient.interceptors.request.use(
-  (config: AxiosRequestConfig) => {
-    const token = localStorage.getItem("walletAuthToken"); // or from state
-    if (token) {
-      config.headers = {
-        ...config.headers,
-        Authorization: `Bearer ${token}`,
-      };
+  (config: InternalAxiosRequestConfig) => {
+    try {
+      if (typeof window !== "undefined") {
+        const token = localStorage.getItem("walletAuthToken");
+        if (token) {
+          // SAFE: ensure headers object exists and keeps correct type
+          if (!config.headers) config.headers = {} as AxiosRequestHeaders;
+          config.headers['Authorization'] = `Bearer ${token}`;
+        }
+      }
+    } catch (err) {
+      console.warn("Token read failed:", err);
     }
     return config;
   },
   (error) => Promise.reject(error)
 );
 
-// Optional: Response interceptor (centralized error handling)
+// ─── RESPONSE INTERCEPTOR ───────────────────────
 apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   (error) => {
-    console.error("API call failed:", error.response?.data || error.message);
+    console.error(
+      "API call failed:",
+      error?.response?.data || error?.message || error
+    );
     return Promise.reject(error);
   }
 );

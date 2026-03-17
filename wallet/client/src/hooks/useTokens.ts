@@ -2,16 +2,16 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import apiClient from "../services/apiClient";
 
 export interface TokenType {
-  id: string;             // unique identifier (tokenAddress or backend-provided ID)
+  id: string;
   tokenAddress: string;
   symbol: string;
   name: string;
-  balance: string;        // on-chain balance as string
-  usdValue: number;       // converted USD value
+  balance: string;
+  usdValue: number;
   isSpam: boolean;
   chainId: number;
-  isZero?: boolean;       // derived field if balance <= 0
-  [key: string]: any;     // for future-proofing: accept extra backend fields
+  isZero?: boolean;
+  [key: string]: any;
 }
 
 export const useTokens = (walletAddress?: string) => {
@@ -19,28 +19,35 @@ export const useTokens = (walletAddress?: string) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  // fetch tokens from backend API
   const fetchTokens = useCallback(async () => {
     if (!walletAddress) return;
+
     setLoading(true);
     setError(null);
 
     try {
       const response = await apiClient.get(`/wallet/${walletAddress}/tokens`);
-      
-      // map backend response to TokenType; preserve extra fields for future-proofing
-      const fetchedTokens: TokenType[] = response.data.map((t: any) => ({
-        id: t.id || t.tokenAddress,
-        tokenAddress: t.tokenAddress,
-        symbol: t.symbol,
-        name: t.name,
-        balance: t.balance,
-        usdValue: t.usdValue || 0,
-        isSpam: t.isSpam || false,
-        chainId: t.chainId || 1,
-        isZero: parseFloat(t.balance) <= 0,
-        ...t, // include any future backend fields dynamically
-      }));
+
+      // SAFETY: ensure array
+      const data = Array.isArray(response?.data) ? response.data : [];
+
+      const fetchedTokens: TokenType[] = data.map((t: any) => {
+        const balanceNum = Number(t.balance);
+        const usd = Number(t.usdValue);
+
+        return {
+          id: t.id || t.tokenAddress || Math.random().toString(),
+          tokenAddress: t.tokenAddress || "",
+          symbol: t.symbol || "UNK",
+          name: t.name || "Unknown",
+          balance: t.balance || "0",
+          usdValue: isNaN(usd) ? 0 : usd,
+          isSpam: Boolean(t.isSpam),
+          chainId: t.chainId || 1,
+          isZero: isNaN(balanceNum) ? true : balanceNum <= 0,
+          ...t,
+        };
+      });
 
       setTokens(fetchedTokens);
     } catch (err: any) {
@@ -52,18 +59,40 @@ export const useTokens = (walletAddress?: string) => {
     }
   }, [walletAddress]);
 
-  // auto-fetch on mount or walletAddress change
   useEffect(() => {
     fetchTokens();
   }, [fetchTokens]);
 
-  // derived arrays for convenience
-  const spamTokens = useMemo(() => tokens.filter(t => t.isSpam), [tokens]);
-  const dustTokens = useMemo(() => tokens.filter(t => !t.isSpam && parseFloat(t.balance) > 0), [tokens]);
-  const zeroTokens = useMemo(() => tokens.filter(t => t.isZero), [tokens]);
-  const totalValue = useMemo(() => tokens.reduce((sum, t) => sum + t.usdValue, 0), [tokens]);
+  // SAFE DERIVED DATA
 
-  // refresh helper for after swaps, burns, recoveries
+  const spamTokens = useMemo(
+    () => tokens.filter(t => t?.isSpam),
+    [tokens]
+  );
+
+  const dustTokens = useMemo(
+    () =>
+      tokens.filter(t => {
+        const balance = Number(t.balance);
+        return !t.isSpam && !isNaN(balance) && balance > 0;
+      }),
+    [tokens]
+  );
+
+  const zeroTokens = useMemo(
+    () => tokens.filter(t => t?.isZero),
+    [tokens]
+  );
+
+  const totalValue = useMemo(
+    () =>
+      tokens.reduce((sum, t) => {
+        const val = Number(t.usdValue);
+        return sum + (isNaN(val) ? 0 : val);
+      }, 0),
+    [tokens]
+  );
+
   const refresh = () => fetchTokens();
 
   return {

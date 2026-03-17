@@ -1,7 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 
 // ─── DUST SUMMARY CARD ───────────────────────────────────────────────
 export function DustSummary({ totalDust = '$847.20', dustTokens = MOCK_DUST }) {
+  // ✅ SAFETY: ensure array
+  const safeDustTokens = Array.isArray(dustTokens) ? dustTokens : [];
+
   return (
     <div className="ds-card card animate-slide-up stagger-3">
       <div className="ds-header">
@@ -12,7 +15,7 @@ export function DustSummary({ totalDust = '$847.20', dustTokens = MOCK_DUST }) {
       <div className="divider" />
 
       <div className="ds-list">
-        {dustTokens.map(token => (
+        {safeDustTokens.map(token => (
           <div key={token.id} className="ds-row">
             <div className="ds-token">
               <span className={`chain-badge chain-${token.chain}`}>
@@ -42,7 +45,11 @@ const MOCK_DUST = [
 
 // ─── CLEAN POINTS CARD ───────────────────────────────────────────────
 export function CleanPointsCard({ points = 2480, level = 'Diamond', nextLevel = 3000 }) {
-  const pct = Math.round((points / nextLevel) * 100);
+  // ✅ SAFETY: prevent NaN / divide issues
+  const safePoints = Number(points) || 0;
+  const safeNext = Number(nextLevel) || 1;
+
+  const pct = Math.max(0, Math.min(100, Math.round((safePoints / safeNext) * 100)));
 
   return (
     <div className="cp-card card animate-slide-up stagger-4">
@@ -52,13 +59,15 @@ export function CleanPointsCard({ points = 2480, level = 'Diamond', nextLevel = 
       </div>
 
       <div className="cp-value-row">
-        <span className="cp-value mono-value">{points.toLocaleString()}</span>
+        <span className="cp-value mono-value">{safePoints.toLocaleString()}</span>
         <span className="cp-pts-label">pts</span>
       </div>
 
       <div>
         <div className="cp-bar-labels">
-          <span className="cp-progress-label">{points.toLocaleString()} / {nextLevel.toLocaleString()}</span>
+          <span className="cp-progress-label">
+            {safePoints.toLocaleString()} / {safeNext.toLocaleString()}
+          </span>
           <span className="cp-next-label">Next: Master</span>
         </div>
         <div className="health-bar-track" style={{ height: 6, marginTop: 8 }}>
@@ -91,9 +100,8 @@ const CP_ACTIONS = [
 
 export default DustSummary;
 
-/* ─── STYLES ────────────────────────────────────────────────────────── */
+/* ─── STYLES (React-safe injection) ─────────────────────────────────── */
 const styles = `
-/* Dust Summary */
 .ds-card { padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md); }
 .ds-header { display: flex; align-items: center; justify-content: space-between; }
 .ds-total { font-size: 18px; }
@@ -103,7 +111,6 @@ const styles = `
 .ds-symbol { font-size: 13px; font-weight: 600; }
 .ds-value { font-size: 13px; }
 
-/* Clean Points */
 .cp-card { padding: var(--space-lg); display: flex; flex-direction: column; gap: var(--space-md); }
 .cp-header { display: flex; align-items: center; justify-content: space-between; }
 .cp-level {
@@ -123,12 +130,16 @@ const styles = `
 .cp-action-pts { font-size: 11px; }
 `;
 
-if (typeof document !== 'undefined') {
-  const id = 'ds-cp-styles';
-  if (!document.getElementById(id)) {
-    const el = document.createElement('style');
-    el.id = id;
-    el.textContent = styles;
-    document.head.appendChild(el);
-  }
+export function DustSummaryStyles() {
+  useEffect(() => {
+    const id = 'ds-cp-styles';
+    if (!document.getElementById(id)) {
+      const el = document.createElement('style');
+      el.id = id;
+      el.textContent = styles;
+      document.head.appendChild(el);
+    }
+  }, []);
+
+  return null;
 }

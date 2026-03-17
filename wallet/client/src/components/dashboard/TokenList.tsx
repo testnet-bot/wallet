@@ -41,7 +41,12 @@ export default function TokenList({
 }: TokenListProps) {
   const { address: connectedAddress, isConnected } = useAccount();
   const address = customAddress || connectedAddress;
-  const { data: native } = useBalance({ address: address as `0x${string}` | undefined });
+
+  const { data: native } = useBalance({
+    address: address as `0x${string}` | undefined,
+  });
+
+  const safeSelectedIds = Array.isArray(selectedIds) ? selectedIds : [];
 
   const [tokens, setTokens] = useState<Token[]>([]);
   const [loading, setLoading] = useState(false);
@@ -49,7 +54,7 @@ export default function TokenList({
   const [filter, setFilter] = useState(externalFilter || "all");
   const [sortBy, setSortBy] = useState(externalSort || "value");
 
-  // ── FETCH TOKENS FROM BACKEND ───────────────────────────────
+  // ── FETCH TOKENS ───────────────────────────────
   const fetchTokens = useCallback(async () => {
     if (!isConnected && !customAddress) return;
 
@@ -60,29 +65,40 @@ export default function TokenList({
       const res = await fetch(
         `http://localhost:3001/tokens/list?walletAddress=${address}`
       );
+
       if (!res.ok) throw new Error("API error");
 
-      const erc20s: Token[] = await res.json();
+      let erc20s: Token[] = [];
+      try {
+        const data = await res.json();
+        erc20s = Array.isArray(data) ? data : [];
+      } catch {
+        erc20s = [];
+      }
 
-      const nativeItem: Token[] = native
-        ? [
-            {
-              id: "native",
-              symbol: native.symbol || "ETH",
-              name: native.symbol === "ETH" ? "Ethereum" : "Native Token",
-              balance: formatUnits(native.value, native.decimals),
-              usdValue: 0,
-              change24h: 0,
-              chainLabel: native.symbol,
-              isSpam: false,
-            },
-          ]
-        : [];
+      const nativeItem: Token[] =
+        native && native.value
+          ? [
+              {
+                id: "native",
+                symbol: native.symbol || "ETH",
+                name: native.symbol === "ETH" ? "Ethereum" : "Native Token",
+                balance: formatUnits(native.value, native.decimals),
+                usdValue: 0,
+                change24h: 0,
+                chainLabel: native.symbol || "native",
+                isSpam: false,
+              },
+            ]
+          : [];
 
-      const allTokens = externalTokens || [...nativeItem, ...erc20s];
-      setTokens(allTokens);
+      const safeExternal = Array.isArray(externalTokens) ? externalTokens : null;
 
-      if (onTokensChange) onTokensChange(allTokens); // Sync with parent
+      const allTokens = safeExternal || [...nativeItem, ...erc20s];
+
+      setTokens(Array.isArray(allTokens) ? allTokens : []);
+
+      if (onTokensChange) onTokensChange(allTokens || []);
     } catch (err) {
       console.error("Token sync error:", err);
       setError("Unable to load tokens");
@@ -93,37 +109,42 @@ export default function TokenList({
     }
   }, [address, isConnected, native, externalTokens, customAddress, onTokensChange]);
 
-  // ── AUTO REFRESH INTERVAL ────────────────────────────────
+  // ── AUTO REFRESH ────────────────────────────────
   useEffect(() => {
     fetchTokens();
 
     if (autoRefresh) {
-      const interval = setInterval(fetchTokens, 15000); // 15s
+      const interval = setInterval(fetchTokens, 15000);
       return () => clearInterval(interval);
     }
   }, [fetchTokens, autoRefresh]);
 
-  // ── FILTER & SORT ───────────────────────────────────────
+  // ── FILTER & SORT ───────────────────────────────
   const filteredTokens = useMemo(() => {
     const currentFilter = externalFilter || filter;
     const currentSort = externalSort || sortBy;
 
-    return (externalTokens || tokens)
+    const base = Array.isArray(externalTokens)
+      ? externalTokens
+      : Array.isArray(tokens)
+      ? tokens
+      : [];
+
+    return base
       .filter((t) =>
         currentFilter === "all"
           ? true
           : currentFilter === "spam"
-          ? t.isSpam
-          : !t.isSpam
+          ? t?.isSpam
+          : !t?.isSpam
       )
       .sort((a, b) => {
-        if (currentSort === "value") return (b.usdValue || 0) - (a.usdValue || 0);
-        if (currentSort === "name") return (a.symbol || "").localeCompare(b.symbol || "");
+        if (currentSort === "value") return (b?.usdValue || 0) - (a?.usdValue || 0);
+        if (currentSort === "name") return (a?.symbol || "").localeCompare(b?.symbol || "");
         return 0;
       });
   }, [tokens, externalTokens, filter, sortBy, externalFilter, externalSort]);
 
-  // ── SELECTION HANDLER ───────────────────────────────────
   const handleSelect = (id: string) => {
     if (!selectable || !onSelect) return;
     onSelect(id);
@@ -188,22 +209,22 @@ export default function TokenList({
         {!loading &&
           !error &&
           filteredTokens.map((token, i) => {
-            const change = token.change24h ?? 0;
-            const isSelected = selectedIds.includes(token.id);
+            const change = token?.change24h ?? 0;
+            const isSelected = safeSelectedIds.includes(token?.id);
 
             return (
               <div
-                key={token.id}
+                key={token?.id || i}
                 className={`token-row tl-row ${
-                  token.isSpam ? "spam" : ""
+                  token?.isSpam ? "spam" : ""
                 } animate-slide-up stagger-${Math.min(i + 1, 8)} ${
                   selectable && isSelected ? "selected" : ""
                 }`}
-                onClick={() => handleSelect(token.id)}
+                onClick={() => handleSelect(token?.id)}
               >
                 <div className="tl-token-info">
                   <div className="token-icon">
-                    {token.logo ? (
+                    {token?.logo ? (
                       <img
                         src={token.logo}
                         alt={token.symbol}
@@ -212,49 +233,39 @@ export default function TokenList({
                         style={{ borderRadius: "50%" }}
                       />
                     ) : (
-                      <span
-                        style={{
-                          fontSize: 14,
-                          fontWeight: 700,
-                          color: "var(--text-secondary)",
-                        }}
-                      >
-                        {token.symbol?.[0] || "?"}
+                      <span style={{ fontSize: 14, fontWeight: 700 }}>
+                        {token?.symbol?.[0] || "?"}
                       </span>
                     )}
 
-                    {token.isSpam && (
-                      <div className="spam-badge-overlay" title="Spam token">
-                        !
-                      </div>
+                    {token?.isSpam && (
+                      <div className="spam-badge-overlay">!</div>
                     )}
                   </div>
 
                   <div className="token-info">
-                    <div className="token-name">{token.name}</div>
+                    <div className="token-name">{token?.name || "Unknown"}</div>
                     <div className="token-meta">
-                      <span className={`chain-badge chain-${token.chainLabel}`}>
+                      <span className={`chain-badge chain-${token?.chainLabel || "unknown"}`}>
                         <span className="chain-dot" />
-                        {token.chainLabel}
+                        {token?.chainLabel || "unknown"}
                       </span>
-                      {token.isSpam && <span className="spam-label">spam</span>}
+                      {token?.isSpam && <span className="spam-label">spam</span>}
                     </div>
                   </div>
                 </div>
 
                 <div className="tl-balance">
                   <div className="token-usd">
-                    {token.balance}{" "}
-                    <span style={{ color: "var(--text-tertiary)", fontWeight: 400 }}>
-                      {token.symbol}
-                    </span>
+                    {token?.balance || 0}{" "}
+                    <span>{token?.symbol || "?"}</span>
                   </div>
                 </div>
 
                 <div className="token-values">
                   <div className="token-usd">
                     $
-                    {(token.usdValue || 0).toLocaleString("en-US", {
+                    {(Number(token?.usdValue) || 0).toLocaleString("en-US", {
                       minimumFractionDigits: 2,
                       maximumFractionDigits: 2,
                     })}

@@ -100,7 +100,8 @@ export default function LandingPage() {
 
 
  return (
-  <div className="snap-container" ref={containerRef}>
+  <div className="snap-container" ref={containerRef}
+  >
   {/* ── HERO SECTION ─────── */}
       <section className="snap-section hero-section" data-index="0">
         <div className="bg-mesh" />
