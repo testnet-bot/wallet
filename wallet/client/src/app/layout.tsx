@@ -15,7 +15,6 @@ import WalletScanner from '../components/wallet/WalletScanner';
 
 
 export default function Layout() {
-  console.log("Layout rendered");
   const [walletAddress, setWalletAddress] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [walletOpen, setWalletOpen] = useState(false);
@@ -38,9 +37,6 @@ export default function Layout() {
 
   return (
     <div className="app-shell" style={{ width: '100%', minHeight: '100%' }}>
-      <div style={{ background: 'red', color: 'white', width: '100%', padding: 8 }}>
-              LAYOUT RENDERED
-                  </div>
       
       {/* ─── HEADER ONLY ─────────────────────────────────────────────── */}
       <header className={`topnav ${scrolled ? 'scrolled' : ''}`}>
@@ -113,7 +109,7 @@ export default function Layout() {
         )}
       </header>
       {/* ─── PAGE CONTENT ──────── */}
- <PageContainer style={{ background: 'black', minHeight: '100vh', border: '3px solid red' }}>
+ <PageContainer style={{ background: 'black', minHeight: '100vh',}}>
   <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto', width: '100%' }}>
   <Outlet />
   </div>
