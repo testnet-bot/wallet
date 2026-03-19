@@ -1,6 +1,11 @@
-import { Router } from 'express'
-import * as TokenController from './token.controller'
+import express from 'express';
+import { scanTokens } from './token.controller';
 
-export const router = Router()
+const tokensRouter = express.Router();
 
-router.get('/list', TokenController.listTokens)
+tokensRouter.get('/scan', scanTokens);
+
+export const routeConfig = {
+  path: '/tokens',
+  router: tokensRouter,
+};

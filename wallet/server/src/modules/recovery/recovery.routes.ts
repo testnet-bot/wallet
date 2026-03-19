@@ -1,6 +1,11 @@
-import { Router } from 'express'
-import * as RecoveryController from './recovery.controller'
+import express from 'express';
+import { recoverDust } from './recovery.controller';
 
-export const router = Router()
+const recoveryRouter = express.Router();
 
-router.post('/recover', RecoveryController.recoverDust)
+recoveryRouter.post('/dust', recoverDust);
+
+export const routeConfig = {
+  path: '/recovery',
+  router: recoveryRouter,
+};
