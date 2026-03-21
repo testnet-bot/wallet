@@ -1,21 +1,15 @@
-import prisma from './src/config/database.js';
+import prisma from './src/config/database';
 
-async function testConnection() {
-  console.log('🐘 Connecting to WIP Protocol Database...');
-  try {
-    await prisma.$connect();
-    console.log('✅ Connection Successful!');
-    
-    // Test a real read
-    const count = await prisma.payment.count();
-    console.log(`✅ Table Check: Found ${count} payments.`);
-    
-    console.log('\n🚀 SYSTEM ONLINE');
-  } catch (error: any) {
-    console.error('\n❌ INITIALIZATION FAILED:');
-    console.error(error.message);
-  } finally {
-    await prisma.$disconnect();
-  }
+async function run() {
+console.log('🐘 Testing WIP Protocol Database...');
+try {
+// No need to "new PrismaClient()" here, we use the one from config
+const count = await prisma.payment.count();
+console.log(`✅ Connection Successful! Found ${count} payments.`);
+} catch (e) {
+console.error('❌ FAILED:', e);
+} finally {
+await prisma.$disconnect();
 }
-testConnection();
+}
+run();
