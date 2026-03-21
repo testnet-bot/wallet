@@ -1,13 +1,24 @@
-import { markSpamTokens } from './spamDetector.js'
+import { scanGlobalWallet } from '../../blockchain/walletScanner.js';
+import { classifyToken } from './spamDetector.js';
 
 export async function fetchWalletTokens(walletAddress: string) {
-  // Stub: simulate fetching tokens
-  const tokens = [
-    { symbol: 'ETH', balance: 1 },
-    { symbol: 'DUST1', balance: 0.01 },
-    { symbol: 'SPAM1', balance: 0.02 },
-  ]
+  // 1. Fetch raw data from the Multi-Chain Aggregator
+  const rawAssets = await scanGlobalWallet(walletAddress);
 
-  // Mark spam tokens
-  return markSpamTokens(tokens)
+  // 2. Enrich data with security & classification metadata
+  const processedAssets = rawAssets.map(asset => {
+    const classification = classifyToken(asset);
+    
+    return {
+      ...asset,
+      ...classification,
+      isRecoverable: classification.status !== 'spam' && parseFloat(asset.balance) > 0
+    };
+  });
+
+  return {
+    totalAssets: processedAssets.length,
+    assets: processedAssets,
+    timestamp: new Date().toISOString()
+  };
 }
