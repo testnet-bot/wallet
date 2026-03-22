@@ -3,13 +3,13 @@ import { logger } from '../utils/logger.js';
 
 /**
  * Tier 1 Transaction Architect
- * Builds standardized, ready-to-sign payloads for all on-chain interactions.
+ * Standardized payloads with Hex-encoding for cross-RPC compatibility.
  */
 export const txBuilder = {
   /**
    * Prepares a standard ERC20 'Burn' by routing to the verified Dead address.
    */
-  async buildBurnTx(tokenAddress: string, amount: string, decimals: number) {
+  async buildBurnTx(tokenAddress: string, amount: string, decimals: number = 18) {
     const BURN_ADDRESS = '0x000000000000000000000000000000000000dEaD';
     const iface = new ethers.Interface(["function transfer(address to, uint256 value)"]);
     
@@ -23,7 +23,7 @@ export const txBuilder = {
         to: getAddress(tokenAddress),
         data,
         value: "0x0",
-        gasLimit: "100000",
+        gasLimit: ethers.toQuantity(120000n), // Hex-encoded with buffer
         metadata: { type: 'BURN', symbol: 'SPAM' }
       };
     } catch (err: any) {
@@ -35,7 +35,7 @@ export const txBuilder = {
   /**
    * Prepares an Approval for Recovery (Uniswap/Pancake/1inch)
    */
-  async buildApprovalTx(tokenAddress: string, spender: string, amount: string, decimals: number) {
+  async buildApprovalTx(tokenAddress: string, spender: string, amount: string, decimals: number = 18) {
     const iface = new ethers.Interface(["function approve(address spender, uint256 value)"]);
     
     try {
@@ -48,7 +48,7 @@ export const txBuilder = {
         to: getAddress(tokenAddress),
         data,
         value: "0x0",
-        gasLimit: "65000",
+        gasLimit: ethers.toQuantity(75000n), // Hex-encoded
         metadata: { type: 'APPROVAL', spender: getAddress(spender) }
       };
     } catch (err: any) {
@@ -59,13 +59,11 @@ export const txBuilder = {
 
   /**
    * NEW: Prepares a Revoke Transaction (The "Security Shield")
-   * Sets the allowance for a specific spender/scam contract to EXACTLY ZERO.
    */
   async buildRevokeTx(tokenAddress: string, spender: string) {
     const iface = new ethers.Interface(["function approve(address spender, uint256 value)"]);
     
     try {
-      // Logic: Approve zero tokens = Revoke permission
       const data = iface.encodeFunctionData("approve", [
         getAddress(spender),
         0n 
@@ -75,9 +73,8 @@ export const txBuilder = {
         to: getAddress(tokenAddress),
         data,
         value: "0x0",
-        gasLimit: "60000",
-        metadata: { type: 'REVOKE', targetSpender: getAddress(spender) },
-        description: `Revoking all permissions for contract ${spender}`
+        gasLimit: ethers.toQuantity(65000n),
+        metadata: { type: 'REVOKE', targetSpender: getAddress(spender) }
       };
     } catch (err: any) {
       logger.error(`[TxBuilder] Failed to encode revoke: ${err.message}`);
@@ -87,15 +84,15 @@ export const txBuilder = {
 
   /**
    * NEW: Builds a Native Asset Transfer (ETH/POL/BNB)
-   * Used for moving funds out of a compromised wallet manually.
    */
   async buildNativeTransfer(to: string, amount: string) {
     try {
+      const weiValue = ethers.parseUnits(amount, 18);
       return {
         to: getAddress(to),
-        value: ethers.parseEther(amount).toString(),
+        value: ethers.toQuantity(weiValue), // Hex-encoded value
         data: "0x",
-        gasLimit: "21000",
+        gasLimit: ethers.toQuantity(21000n),
         metadata: { type: 'NATIVE_TRANSFER' }
       };
     } catch (err: any) {

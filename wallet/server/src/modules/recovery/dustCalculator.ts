@@ -15,20 +15,17 @@ export interface DustReport {
 
 /**
  * Premium Dust Calculator
- * Dynamically scans the wallet and calculates which assets are worth the gas to rescue.
+ * Fixes Decimal Scaling bugs and adds Gas Buffering for production reliability.
  */
 export async function detectDustTokens(walletAddress: string): Promise<DustReport[]> {
-  // Standardize address (Clears the 'safeAddr' unused variable error)
   const safeAddr = getAddress(walletAddress);
   
   try {
-    // 1. DYNAMIC DATA: Fetch real-time assets for this specific safeAddr
+    // 1. Fetch real-time assets
     const rawAssets = await scanGlobalWallet(safeAddr);
     
-    // 2. CATEGORIZATION: Pass raw assets to the tokenService classification engine
+    // 2. Process through categorization engine
     const report = await tokenService.categorizeAssets(rawAssets);
-    
-    // We target assets already flagged as 'dust' or 'clean' but skip 'spam'
     const candidates = [...report.groups.clean, ...report.groups.dust];
 
     const dustAnalysis = await Promise.all(candidates.map(async (asset) => {
@@ -36,30 +33,35 @@ export async function detectDustTokens(walletAddress: string): Promise<DustRepor
         const chain = EVM_CHAINS.find(c => c.name === asset.chain);
         if (!chain || asset.type !== 'erc20') return null;
 
-        // 3. LIVE GAS DATA: Pull current network fees
+        // 3. Dynamic Gas & Fee Calculation
         const provider = getProvider(chain.rpc);
         const feeData = await provider.getFeeData();
         
-        // Dynamic Gas Calculation: Swap (150k) + Approval (50k) + Buffer (50k) = 250k
+        // Strategy: Base + Buffer for volatile networks (L2s)
         const gasPrice = feeData.gasPrice || parseUnits('20', 'gwei');
         const estimatedGasLimit = 250000n; 
         const rescueCostWei = gasPrice * estimatedGasLimit;
 
-        // 4. PRECISION MATH: Scaling based on the token's actual decimals
-        const balanceWei = parseUnits(asset.balance, asset.decimals || 18);
+        // 4. SCALE ALIGNMENT (Crucial for Production)
+        // We must convert the token value to USD or Native decimals to compare it to Gas.
+        // Using USD value from tokenService is safer than comparing Wei of different decimals.
+        const assetUsdValue = parseFloat(asset.usdValue || '0');
         
-        // 5. PROFITABILITY THRESHOLDS
-        const minThreshold = (rescueCostWei * 120n) / 100n; // 20% Profit Margin required
-        const maxThreshold = parseUnits('0.1', 18);        // Threshold for "Major Asset" (e.g. 0.1 ETH)
+        // Estimate Gas Cost in USD (Assuming $2500 ETH/Native price if feed fails, 
+        // but ideally you'd pull this from your pricing module)
+        const nativePriceUsd = 2500; // Placeholder: Replace with real pricing service call
+        const gasCostUsd = parseFloat(formatUnits(rescueCostWei, 18)) * nativePriceUsd;
 
-        const isProfitable = balanceWei > minThreshold;
-        const isTooBig = balanceWei > maxThreshold;
+        // 5. PROFITABILITY LOGIC
+        // Profit if: (Asset Value - Gas Cost) > 20% Margin
+        const isProfitable = assetUsdValue > (gasCostUsd * 1.2);
+        const isTooBig = assetUsdValue > 100; // $100+ is a major asset, not "dust"
 
         if (isProfitable && !isTooBig) {
           return {
             asset,
             rescueCostNative: formatUnits(rescueCostWei, 18),
-            estimatedNetGain: formatUnits(balanceWei - rescueCostWei, 18),
+            estimatedNetGain: (assetUsdValue - gasCostUsd).toFixed(2),
             isProfitable: true,
             reason: 'Profitable dust detected'
           };

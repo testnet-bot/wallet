@@ -8,16 +8,18 @@ import { isAddress } from 'ethers';
  * Manages user-defined rules stored securely in PostgreSQL (Prisma).
  */
 export const automationController = {
-  // GET all rules for a specific wallet
+  /**
+   * GET all rules for a specific wallet
+   */
   async getRules(req: Request, res: Response) {
     try {
       const { address } = req.query;
-      if (!address || !isAddress(address as string)) {
+      if (!address || typeof address !== 'string' || !isAddress(address)) {
         return res.status(400).json({ success: false, error: 'Valid address required' });
       }
 
       const rules = await prisma.automationRule.findMany({
-        where: { walletAddress: (address as string).toLowerCase() }
+        where: { walletAddress: address.toLowerCase() }
       });
 
       res.json({ success: true, rules });
@@ -27,7 +29,9 @@ export const automationController = {
     }
   },
 
-  // ADD a new rule to the DB
+  /**
+   * ADD a new rule to the DB
+   */
   async addRule(req: Request, res: Response) {
     try {
       const { address, chain, type, targetBalance } = req.body;
@@ -42,38 +46,44 @@ export const automationController = {
           chain,
           type,
           active: true,
-          targetBalance: targetBalance?.toString()
+          targetBalance: targetBalance?.toString() || null
         }
       });
 
-      logger.info(`[Automation] New rule added for ${address}: ${type} on ${chain}`);
+      logger.info(`[Automation] Rule added: ${type} for ${address}`);
       res.json({ success: true, rule });
     } catch (error: any) {
       res.status(500).json({ success: false, error: error.message });
     }
   },
 
-  // TOGGLE or UPDATE a rule
+  /**
+   * TOGGLE or UPDATE a rule
+   */
   async updateRule(req: Request, res: Response) {
     try {
       const id = Number(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' });
+
       const { active, targetBalance } = req.body;
 
       const updated = await prisma.automationRule.update({
         where: { id },
         data: { 
           active: typeof active === 'boolean' ? active : undefined,
-          targetBalance: targetBalance?.toString()
+          targetBalance: targetBalance !== undefined ? targetBalance.toString() : undefined
         }
       });
 
       res.json({ success: true, updated });
     } catch (error: any) {
-      res.status(404).json({ success: false, error: 'Rule not found or update failed' });
+      res.status(404).json({ success: false, error: 'Rule not found' });
     }
   },
 
-  // DELETE a rule
+  /**
+   * DELETE a rule
+   */
   async deleteRule(req: Request, res: Response) {
     try {
       const id = Number(req.params.id);

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
-import { executeDustRecovery } from './recovery.service.js';
+import { recoveryService } from './recovery.service.js';
+
 import { logger } from '../../utils/logger.js';
 
 /**
@@ -18,9 +19,9 @@ export async function recoverDustController(req: Request, res: Response) {
     }
 
     logger.info(`[RecoveryController] Triggering scan for: ${address}`);
-    const data = await executeDustRecovery(address as string);
+    const result = await recoveryService.executeDustRecovery(address);
     
-    res.status(200).json(data);
+    res.json(result);
   } catch (err: any) {
     logger.error(`[RecoveryController] Error: ${err.message}`);
     res.status(500).json({ success: false, error: err.message });

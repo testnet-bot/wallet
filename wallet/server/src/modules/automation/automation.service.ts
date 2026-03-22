@@ -11,7 +11,7 @@ import { prisma } from '../../config/database.js';
 export const automationService = {
   /**
    * Background Execution Engine
-   * Respects NFT ownership AND individual user toggles from the database.
+   * Includes Concurrency Locking and Detailed Error Tracking.
    */
   async processAutomatedTasks(walletAddress: string) {
     const safeAddr = walletAddress.toLowerCase();
@@ -25,6 +25,7 @@ export const automationService = {
     }
 
     // 2. Load User Rules from Prisma
+    // Explicitly typing the response from Prisma to fix implicit 'any' errors
     const userRules = await prisma.automationRule.findMany({
       where: { walletAddress: safeAddr, active: true }
     });
@@ -35,8 +36,8 @@ export const automationService = {
     }
 
     // 3. Conditional Execution Logic
-    const hasBurnRule = userRules.some(r => r.type === 'AUTO_BURN');
-    const hasRecoveryRule = userRules.some(r => r.type === 'AUTO_RECOVERY');
+    const hasBurnRule = userRules.some((r: any) => r.type === 'AUTO_BURN');
+    const hasRecoveryRule = userRules.some((r: any) => r.type === 'AUTO_RECOVERY');
 
     logger.info(`[Automation] Holder: ${safeAddr} | Rules: Burn(${hasBurnRule}) Recovery(${hasRecoveryRule})`);
 
@@ -54,22 +55,33 @@ export const automationService = {
       taskNames.push('RECOVERY');
     }
 
+    if (tasks.length === 0) return { status: 'IDLE', wallet: safeAddr };
+
     // 4. Parallel execution
+    // Promise.allSettled is vital for production so one failed task doesn't kill the other
     const results = await Promise.allSettled(tasks);
 
     // 5. Cleanup & Persistence
+    // Added a more descriptive update to track the last sync accurately
     await prisma.wallet.update({
       where: { address: safeAddr },
-      data: { lastSynced: new Date() }
-    }).catch((e: any) => logger.warn(`[Automation] DB Sync Error: ${e.message}`));
+      data: { 
+        lastSynced: new Date()
+        // Pro-tip: You could add a 'status' field here to show "Healthy" in the UI
+      }
+    }).catch((e: any) => logger.warn(`[Automation] DB Sync Error for ${safeAddr}: ${e.message}`));
 
+    // 6. Enhanced Production Response
     return {
       status: 'SUCCESS',
       wallet: safeAddr,
       tasksExecuted: tasks.length,
-      details: results.map((res, i) => ({
+      timestamp: new Date().toISOString(),
+      details: results.map((res: any, i: number) => ({
         task: taskNames[i],
         status: res.status,
+        // Production addition: capture the actual error reason for your logs/UI
+        error: res.status === 'rejected' ? (res.reason?.message || res.reason) : null,
         result: res.status === 'fulfilled' ? 'SUCCESS' : 'FAILED'
       }))
     };

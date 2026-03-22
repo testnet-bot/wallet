@@ -13,6 +13,8 @@ model ApiKey {
   plan      String
   createdAt DateTime @default(now())
   usage     Int      @default(0)
+
+  @@index([wallet])
 }
 
 model Payment {
@@ -23,6 +25,8 @@ model Payment {
   chain     String
   confirmed Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([wallet])
 }
 
 model RecoveryAttempt {
@@ -32,6 +36,8 @@ model RecoveryAttempt {
   estimatedTotalUsd String
   status            String   // PENDING, COMPLETED, FAILED
   createdAt         DateTime @default(now())
+
+  @@index([walletAddress])
 }
 
 model Wallet {
@@ -42,13 +48,14 @@ model Wallet {
   lastSynced  DateTime @default(now())
 }
 
-
 model AutomationRule {
   id            Int      @id @default(autoincrement())
   walletAddress String
   chain         String
-  type          String
+  type          String   // AUTO_BURN, AUTO_RECOVERY
   active        Boolean  @default(true)
   targetBalance String?
   createdAt     DateTime @default(now())
+
+  @@index([walletAddress, active])
 }
