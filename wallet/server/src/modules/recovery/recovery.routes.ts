@@ -1,12 +1,16 @@
 import express from 'express';
-import { recoverDust } from './recovery.controller.js';
+import { recoverDustController } from './recovery.controller.js';
 
-const recoveryRouter = express.Router();
+const router = express.Router();
 
-// POST /api/v1/recovery/dust { "walletAddress": "0x..." }
-recoveryRouter.post('/dust', recoverDust);
+/**
+ * @route   POST /api/v1/recovery/dust
+ * @desc    Initialize a dust rescue mission
+ */
+router.post('/dust', recoverDustController);
 
-export const recoveryRoutes = {
-  path: '/recovery',
-  router: recoveryRouter,
+export const routeConfig = {
+  path: '/v1/recovery',
+  router: router,
+  isPublic: false
 };

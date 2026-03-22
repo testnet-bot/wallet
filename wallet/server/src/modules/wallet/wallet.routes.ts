@@ -1,39 +1,22 @@
 import express from 'express';
 import { scanWalletController } from './wallet.controller.js';
-import { walletService } from './wallet.service.js';
 
-const walletRouter = express.Router();
+const router = express.Router();
 
-// EXISTING
-walletRouter.get('/scan', scanWalletController);
+/**
+ * @route   GET /api/v1/wallet/scan
+ * @desc    Quick scan for a single wallet
+ */
+router.get('/scan', scanWalletController);
 
-// NEW FULL MULTI-CHAIN SCAN
-walletRouter.get('/scan-full', async (req, res) => {
-  try {
-    const address = req.query.address as string;
-
-    if (!address) {
-      return res.status(400).json({
-        success: false,
-        error: 'Wallet address is required',
-      });
-    }
-
-    const data = await walletService.scanFull(address);
-
-    res.json({
-      success: true,
-      data,
-    });
-  } catch (err: any) {
-    res.status(500).json({
-      success: false,
-      error: err.message,
-    });
-  }
-});
+/**
+ * @route   POST /api/v1/wallet/scan-full
+ * @desc    Deep multi-chain scan with classification
+ */
+router.post('/scan-full', scanWalletController);
 
 export const routeConfig = {
   path: '/v1/wallet',
-  router: walletRouter,
+  router: router,
+  isPublic: false 
 };
