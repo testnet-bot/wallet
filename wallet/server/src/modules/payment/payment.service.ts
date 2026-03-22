@@ -12,7 +12,7 @@ export const paymentService = {
    * Creates a pending payment record (Intent)
    */
   async createIntent(wallet: string, amount: number, chain: string) {
-    // FIX: Changed prisma.prisma to prisma
+  
     return await prisma.payment.create({
       data: {
         wallet: wallet.toLowerCase(),
@@ -28,7 +28,7 @@ export const paymentService = {
    * Validates recipient AND the actual amount sent.
    */
   async verifyTransaction(paymentId: string, txHash: string) {
-    // FIX: Changed prisma.prisma to prisma
+  
     const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
     if (!payment) throw new Error("Payment record not found");
 
@@ -37,7 +37,7 @@ export const paymentService = {
 
     const provider = getProvider(chainConfig.rpc);
     
-    // 1. Fetch Receipt & Tx Data
+    // Fetch Receipt & Tx Data
     const [receipt, tx] = await Promise.all([
       provider.getTransactionReceipt(txHash),
       provider.getTransaction(txHash)
@@ -47,11 +47,11 @@ export const paymentService = {
       throw new Error("Transaction is still pending or failed on-chain");
     }
 
-    // 2. Security Check: Native Transfer (ETH/BNB/POL)
+    // Security Check: Native Transfer (ETH/BNB/POL)
     const isNativeToMe = receipt.to?.toLowerCase() === REVENUE_ADDRESS?.toLowerCase();
     const nativeValueMatches = parseFloat(ethers.formatEther(tx.value)) >= payment.amount * 0.98;
 
-    // 3. Security Check: ERC20 Transfer (USDC/USDT)
+    // Security Check: ERC20 Transfer (USDC/USDT)
     let isTokenVerified = false;
     const iface = new Interface(ERC20_ABI);
     
@@ -59,7 +59,7 @@ export const paymentService = {
       try {
         const parsed = iface.parseLog(log);
         if (parsed?.name === 'Transfer' && parsed.args.to.toLowerCase() === REVENUE_ADDRESS?.toLowerCase()) {
-          // Premium Logic: Check both 6 and 18 decimals to be future-proof
+      
           const rawValue = parsed.args.value;
           const val6 = parseFloat(ethers.formatUnits(rawValue, 6));
           const val18 = parseFloat(ethers.formatUnits(rawValue, 18));
@@ -75,13 +75,13 @@ export const paymentService = {
     if ((isNativeToMe && nativeValueMatches) || isTokenVerified) {
       logger.info(`[Payment] Success: ${txHash} for $${payment.amount}`);
       
-      // FIX: Changed prisma.prisma to prisma
+  
       return await prisma.payment.update({
         where: { id: paymentId },
         data: { txHash, confirmed: true }
       });
     }
 
-    throw new Error("Funds did not reach treasury or amount was insufficient");
+    throw new Error("Funds did not reach WIP or amount was insufficient");
   }
 };
