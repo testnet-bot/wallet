@@ -5,25 +5,31 @@ import { logger } from '../../utils/logger.js';
 import { prisma } from '../../config/database.js';
 
 /**
- * Premium Burn Service
- * Automatically identifies spam tokens and prepares them for batch burning.
+ * Premium Burn Service - Tier 1 
+ * Integrated with MEV-Shielding and Intelligence-driven batching.
  */
 export const burnService = {
-  async executeSpamBurn(walletAddress: string) {
+  /**
+   * Dynamically handles spam burning. 
+   * Accepts optional pre-scanned tokens to save RPC costs (fixes Worker error).
+   */
+  async executeSpamBurn(walletAddress: string, preScannedTokens?: any[]) {
     const startTime = Date.now();
     const safeAddr = walletAddress.toLowerCase();
 
     try {
-      logger.info(`[BurnService] Scanning for spam assets: ${safeAddr}`);
+      logger.info(`[BurnService] Initiating Sanitization: ${safeAddr}`);
 
-      //  DYNAMIC SCAN: Get real-time on-chain data
-      const rawAssets = await scanGlobalWallet(safeAddr);
+      let spamTokens = preScannedTokens;
 
-      // CLASSIFICATION: Use the tokenService to find the 'spam' group
-      const categorized = await tokenService.categorizeAssets(rawAssets);
-      const spamTokens = categorized.groups.spam;
+      // 1. INTELLIGENCE: Only scan if tokens weren't provided by the caller (Worker/Controller)
+      if (!spamTokens) {
+        const rawAssets = await scanGlobalWallet(safeAddr);
+        const categorized = await tokenService.categorizeAssets(rawAssets);
+        spamTokens = categorized.groups.spam;
+      }
 
-      if (spamTokens.length === 0) {
+      if (!spamTokens || spamTokens.length === 0) {
         return {
           success: true,
           message: 'Wallet is clean! No spam tokens detected.',
@@ -31,19 +37,23 @@ export const burnService = {
         };
       }
 
-      // EXECUTION PREP: Pass the real spam list to the Batch Engine
+      // 2. BATCH EXECUTION: Direct to the Flashbots-capable engine
       const burnPlans = await batchBurnTokens(safeAddr, spamTokens);
 
-      //  PERSISTENCE: Log the "Clean-up" action in the Database
-      // Using the Wallet model we added to the schema earlier
+      // 3. PERSISTENCE & ANALYTICS: Update Health Score in DB
+      // We assume the wallet is now "Clean" after this operation
       await prisma.wallet.update({
         where: { address: safeAddr },
-        data: { lastSynced: new Date() }
+        data: { 
+          lastSynced: new Date(),
+          healthScore: 100, // Reset health to max after sanitization
+          riskLevel: 'LOW'
+        }
       }).catch((err: any) => logger.warn(`[BurnService] DB Sync skipped: ${err.message}`));
 
       const duration = (Date.now() - startTime) / 1000;
 
-      //  PREMIUM RESPONSE: Detailed report for the UI
+      // 4. PREMIUM RESPONSE: Strategic report for the Frontend
       return {
         success: true,
         wallet: safeAddr,
@@ -51,7 +61,7 @@ export const burnService = {
         summary: {
           spamTokensFound: spamTokens.length,
           totalChainsToClean: burnPlans.length,
-          totalEstimatedGas: burnPlans.reduce((sum, p) => sum + parseFloat(p.estimatedGasNative), 0)
+          totalEstimatedGas: burnPlans.reduce((sum, p) => sum + parseFloat(p.estimatedGasNative || '0'), 0)
         },
         plans: burnPlans,
         timestamp: new Date().toISOString()

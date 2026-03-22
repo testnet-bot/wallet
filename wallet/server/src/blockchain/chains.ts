@@ -1,3 +1,5 @@
+import 'dotenv/config';
+
 export interface ChainConfig {
   id: number;
   name: string;
@@ -8,13 +10,26 @@ export interface ChainConfig {
   explorer: string;
 }
 
+/**
+ * Production-Grade Blockchain Configuration
+ * Upgraded with Dynamic Provider Routing and Fixed RPC Suffixes.
+ */
+const ALCHEMY_KEY = process.env.ALCHEMY_KEY || '';
+
+const getDynamicRpc = (publicRpc: string, alchemyAlias?: string): string => {
+  if (ALCHEMY_KEY && alchemyAlias) {
+    return `https://${alchemyAlias}://{ALCHEMY_KEY}`;
+  }
+  return publicRpc;
+};
+
 export const EVM_CHAINS: ChainConfig[] = [
-  { id: 1, name: 'Ethereum', symbol: 'ETH', rpc: 'https://eth.llamarpc.com', alchemy: 'eth-mainnet', explorer: 'https://etherscan.io' },
-  { id: 56, name: 'BNB Smart Chain', symbol: 'BNB', rpc: 'https://binance.llamarpc.com', explorer: 'https://bscscan.com' },
-  { id: 137, name: 'Polygon', symbol: 'POL', rpc: 'https://polygon.llamarpc.com', alchemy: 'polygon-mainnet', explorer: 'https://polygonscan.com' },
-  { id: 8453, name: 'Base', symbol: 'ETH', rpc: 'https://mainnet.base.org', alchemy: 'base-mainnet', explorer: 'https://basescan.org' },
-  { id: 42161, name: 'Arbitrum One', symbol: 'ETH', rpc: 'https://arb1.arbitrum.io', alchemy: 'arb-mainnet', explorer: 'https://arbiscan.io' },
-  { id: 10, name: 'Optimism', symbol: 'ETH', rpc: 'https://mainnet.optimism.io', alchemy: 'opt-mainnet', explorer: 'https://optimistic.etherscan.io' },
+  { id: 1, name: 'Ethereum', symbol: 'ETH', rpc: getDynamicRpc('https://eth.drpc.org', 'eth-mainnet'), alchemy: 'eth-mainnet', explorer: 'https://etherscan.io' },
+  { id: 56, name: 'BNB Smart Chain', symbol: 'BNB', rpc: 'https://binance.drpc.org', explorer: 'https://bscscan.com' },
+  { id: 137, name: 'Polygon', symbol: 'POL', rpc: getDynamicRpc('https://polygon-rpc.com', 'polygon-mainnet'), alchemy: 'polygon-mainnet', explorer: 'https://polygonscan.com' },
+  { id: 8453, name: 'Base', symbol: 'ETH', rpc: getDynamicRpc('https://mainnet.base.org', 'base-mainnet'), alchemy: 'base-mainnet', explorer: 'https://basescan.org' },
+  { id: 42161, name: 'Arbitrum One', symbol: 'ETH', rpc: getDynamicRpc('https://arb1.arbitrum.io', 'arb-mainnet'), alchemy: 'arb-mainnet', explorer: 'https://arbiscan.io' },
+  { id: 10, name: 'Optimism', symbol: 'ETH', rpc: getDynamicRpc('https://mainnet.optimism.io', 'opt-mainnet'), alchemy: 'opt-mainnet', explorer: 'https://optimistic.etherscan.io' },
   { id: 43114, name: 'Avalanche', symbol: 'AVAX', rpc: 'https://api.avax.network', explorer: 'https://snowtrace.io' },
   { id: 81457, name: 'Blast', symbol: 'ETH', rpc: 'https://rpc.blast.io', explorer: 'https://blastscan.io' },
   { id: 59144, name: 'Linea', symbol: 'ETH', rpc: 'https://rpc.linea.build', explorer: 'https://lineascan.build' },
@@ -38,7 +53,7 @@ export const EVM_CHAINS: ChainConfig[] = [
   { id: 167000, name: 'Taiko', symbol: 'ETH', rpc: 'https://rpc.mainnet.taiko.xyz', explorer: 'https://taikoscan.io' },
   { id: 55, name: 'Zircuit', symbol: 'ETH', rpc: 'https://zircuit-mainnet.drpc.org', explorer: 'https://explorer.zircuit.com' },
   { id: 7777777, name: 'Zora', symbol: 'ETH', rpc: 'https://rpc.zora.energy', explorer: 'https://explorer.zora.energy' },
-  { id: 480, name: 'World Chain', symbol: 'ETH', rpc: 'https://worldchain-mainnet.g.alchemy.com', explorer: 'https://worldscan.org' },
+  { id: 480, name: 'World Chain', symbol: 'ETH', rpc: getDynamicRpc('https://worldchain-mainnet.g.alchemy.com', 'worldchain-mainnet'), explorer: 'https://worldscan.org' },
   { id: 660279, name: 'Xai', symbol: 'XAI', rpc: 'https://xai-chain.net', explorer: 'https://xaiscan.io' },
   { id: 4200, name: 'Merlin', symbol: 'BTC', rpc: 'https://rpc.merlinchain.io', explorer: 'https://scan.merlinchain.io' },
   { id: 57073, name: 'BeraChain', symbol: 'BERA', rpc: 'https://rpc.berachain.com', explorer: 'https://berascan.com' },

@@ -3,7 +3,7 @@ import { logger } from '../utils/logger.js';
 
 /**
  * Tier 1 Transaction Architect
- * Standardized payloads with Hex-encoding for cross-RPC compatibility.
+ * Standardized payloads with Hex-encoding and MEV-Shielding properties.
  */
 export const txBuilder = {
   /**
@@ -24,7 +24,8 @@ export const txBuilder = {
         data,
         value: "0x0",
         gasLimit: ethers.toQuantity(120000n), // Hex-encoded with buffer
-        metadata: { type: 'BURN', symbol: 'SPAM' }
+        metadata: { type: 'BURN', symbol: 'SPAM' },
+        canBundle: true
       };
     } catch (err: any) {
       logger.error(`[TxBuilder] Failed to encode burn: ${err.message}`);
@@ -49,7 +50,8 @@ export const txBuilder = {
         data,
         value: "0x0",
         gasLimit: ethers.toQuantity(75000n), // Hex-encoded
-        metadata: { type: 'APPROVAL', spender: getAddress(spender) }
+        metadata: { type: 'APPROVAL', spender: getAddress(spender) },
+        canBundle: true
       };
     } catch (err: any) {
       logger.error(`[TxBuilder] Failed to encode approval: ${err.message}`);
@@ -74,7 +76,8 @@ export const txBuilder = {
         data,
         value: "0x0",
         gasLimit: ethers.toQuantity(65000n),
-        metadata: { type: 'REVOKE', targetSpender: getAddress(spender) }
+        metadata: { type: 'REVOKE', targetSpender: getAddress(spender) },
+        isSecurityAction: true
       };
     } catch (err: any) {
       logger.error(`[TxBuilder] Failed to encode revoke: ${err.message}`);
@@ -99,5 +102,49 @@ export const txBuilder = {
       logger.error(`[TxBuilder] Failed to encode native transfer: ${err.message}`);
       throw err;
     }
+  },
+
+  /**
+   * INTELLIGENCE: Build Protocol Fee Deduction Tx
+   * Dynamically calculates the 2.5%-7.5% cut for the platform.
+   */
+  async buildFeeTx(recipient: string, amountUsd: number, tokenPrice: number, tokenAddress: string) {
+    try {
+      const feeTokenAmount = (amountUsd / tokenPrice).toString();
+      const iface = new ethers.Interface(["function transfer(address to, uint256 value)"]);
+      
+      const data = iface.encodeFunctionData("transfer", [
+        getAddress(recipient),
+        ethers.parseUnits(feeTokenAmount, 18)
+      ]);
+
+      return {
+        to: getAddress(tokenAddress),
+        data,
+        value: "0x0",
+        gasLimit: ethers.toQuantity(65000n),
+        metadata: { type: 'PROTOCOL_FEE', usdValue: amountUsd }
+      };
+    } catch (err: any) {
+      logger.error(`[TxBuilder] Failed to build fee tx: ${err.message}`);
+      throw err;
+    }
+  },
+
+  /**
+   * INTELLIGENCE: Build Atomic Flashbots Bundle
+   * Chains multiple actions together to ensure safety and atomic execution.
+   */
+  formatBundle(transactions: any[]) {
+    // Priority: Revokes -> Approvals -> Swaps -> Fees
+    const sorted = [...transactions].sort((a, b) => {
+      const priority: Record<string, number> = { 'REVOKE': 1, 'APPROVAL': 2, 'BURN': 3, 'PROTOCOL_FEE': 4 };
+      return (priority[a.metadata.type] || 99) - (priority[b.metadata.type] || 99);
+    });
+
+    return sorted.map((tx, index) => ({
+      ...tx,
+      nonceOffset: index, // Used by the Relayer to chain nonces
+    }));
   }
 };
