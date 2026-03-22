@@ -39,3 +39,13 @@ model Wallet {
   balance    String
   lastSynced DateTime @default(now())
 }
+
+model AutomationRule {
+  id            Int      @id @default(autoincrement())
+  walletAddress String
+  chain         String
+  type          String
+  active        Boolean  @default(true)
+  targetBalance String?
+  createdAt     DateTime @default(now())
+}

@@ -1,125 +1,86 @@
 import { Request, Response } from 'express';
-import { readFile, writeFile } from 'fs/promises';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { prisma } from '../../config/database.js';
+import { logger } from '../../utils/logger.js';
+import { isAddress } from 'ethers';
 
-// ES Module fix for __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+/**
+ * Premium Automation Controller
+ * Manages user-defined rules stored securely in PostgreSQL (Prisma).
+ */
+export const automationController = {
+  // GET all rules for a specific wallet
+  async getRules(req: Request, res: Response) {
+    try {
+      const { address } = req.query;
+      if (!address || !isAddress(address as string)) {
+        return res.status(400).json({ success: false, error: 'Valid address required' });
+      }
 
-// ----------------------------
-// TYPES
-// ----------------------------
-interface Rule {
-  id: number;
-  chain: string;
-  type: string;
-  active: boolean;
-  targetBalance?: string;
-  [key: string]: any; 
-}
+      const rules = await prisma.automationRule.findMany({
+        where: { walletAddress: (address as string).toLowerCase() }
+      });
 
-const RULES_FILE = join(__dirname, 'automationRules.json');
-
-// ----------------------------
-// FILE HELPERS
-// ----------------------------
-async function readRules(): Promise<Rule[]> {
-  try {
-    const data = await readFile(RULES_FILE, 'utf-8');
-    return JSON.parse(data) as Rule[];
-  } catch {
-    return [];
-  }
-}
-
-async function writeRules(rules: Rule[]): Promise<void> {
-  await writeFile(RULES_FILE, JSON.stringify(rules, null, 2), 'utf-8');
-}
-
-// ----------------------------
-// CONTROLLERS
-// ----------------------------
-
-// GET all rules - Using req to signal intentional unused parameter
-export async function getRules(_req: Request, res: Response) {
-  try {
-    const rules = await readRules();
-    res.json({ success: true, rules });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-}
-
-// ADD a new rule
-export async function addRule(req: Request, res: Response) {
-  try {
-    const newRule = req.body as Partial<Rule>;
-
-    if (!newRule.chain || !newRule.type) {
-      return res.status(400).json({ success: false, error: 'chain and type required' });
+      res.json({ success: true, rules });
+    } catch (error: any) {
+      logger.error(`[Automation] GetRules failed: ${error.message}`);
+      res.status(500).json({ success: false, error: 'Failed to fetch rules' });
     }
+  },
 
-    const rules = await readRules();
-    const id = rules.length ? rules[rules.length - 1].id + 1 : 1;
+  // ADD a new rule to the DB
+  async addRule(req: Request, res: Response) {
+    try {
+      const { address, chain, type, targetBalance } = req.body;
 
-    const rule: Rule = {
-      id,
-      chain: newRule.chain,
-      type: newRule.type,
-      active: true,
-      targetBalance: newRule.targetBalance,
-      ...newRule
-    };
+      if (!address || !chain || !type) {
+        return res.status(400).json({ success: false, error: 'address, chain, and type required' });
+      }
 
-    rules.push(rule);
-    await writeRules(rules);
+      const rule = await prisma.automationRule.create({
+        data: {
+          walletAddress: address.toLowerCase(),
+          chain,
+          type,
+          active: true,
+          targetBalance: targetBalance?.toString()
+        }
+      });
 
-    res.json({ success: true, rule });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-}
-
-// UPDATE a rule
-export async function updateRule(req: Request, res: Response) {
-  try {
-    const id = Number(req.params.id);
-    const updates = req.body as Partial<Rule>;
-
-    const rules = await readRules();
-    const index = rules.findIndex((r: Rule) => r.id === id);
-
-    if (index === -1) {
-      return res.status(404).json({ success: false, error: 'Rule not found' });
+      logger.info(`[Automation] New rule added for ${address}: ${type} on ${chain}`);
+      res.json({ success: true, rule });
+    } catch (error: any) {
+      res.status(500).json({ success: false, error: error.message });
     }
+  },
 
-    rules[index] = { ...rules[index], ...updates };
-    await writeRules(rules);
+  // TOGGLE or UPDATE a rule
+  async updateRule(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const { active, targetBalance } = req.body;
 
-    res.json({ success: true, updated: rules[index] });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
-  }
-}
+      const updated = await prisma.automationRule.update({
+        where: { id },
+        data: { 
+          active: typeof active === 'boolean' ? active : undefined,
+          targetBalance: targetBalance?.toString()
+        }
+      });
 
-// DELETE a rule - req is used here for req.params.id
-export async function deleteRule(req: Request, res: Response) {
-  try {
-    const id = Number(req.params.id);
-
-    const rules = await readRules();
-    const index = rules.findIndex((r: Rule) => r.id === id);
-
-    if (index === -1) {
-      return res.status(404).json({ success: false, error: 'Rule not found' });
+      res.json({ success: true, updated });
+    } catch (error: any) {
+      res.status(404).json({ success: false, error: 'Rule not found or update failed' });
     }
+  },
 
-    const deleted = rules.splice(index, 1)[0];
-    await writeRules(rules);
-
-    res.json({ success: true, deleted });
-  } catch (error: any) {
-    res.status(500).json({ success: false, error: error.message });
+  // DELETE a rule
+  async deleteRule(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      await prisma.automationRule.delete({ where: { id } });
+      res.json({ success: true, message: 'Rule deleted permanently' });
+    } catch (error: any) {
+      res.status(404).json({ success: false, error: 'Rule not found' });
+    }
   }
-}
+};
