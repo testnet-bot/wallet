@@ -8,7 +8,6 @@ import { helpers } from '../utils/helpers.js';
  */
 const providerCache = new Map<string, JsonRpcProvider>();
 
-// DYNAMIC CONFIG: Pulls from env or falls back to standard slugs
 const NETWORK_CONFIG = JSON.parse(process.env.CHAIN_NETWORK_MAP || JSON.stringify({
   'ethereum': 'eth-mainnet',
   'polygon': 'polygon-mainnet',
@@ -17,6 +16,13 @@ const NETWORK_CONFIG = JSON.parse(process.env.CHAIN_NETWORK_MAP || JSON.stringif
   'base': 'base-mainnet',
   'bsc': 'binance-smart-chain'
 }));
+
+/**
+ * Legacy Alias for Alchemy URLs to fix TS2305 errors in Scanner and Security Service.
+ */
+export function getAlchemyUrl(network: string): string {
+  return getNetworkUrl(network);
+}
 
 /**
  * Intelligent URL Generator
@@ -36,7 +42,7 @@ export function getNetworkUrl(network: string): string {
     return `https://${slug}.g.alchemy.com/v2/${alchemyKey}`;
   }
 
-  // 3. Last Resort: Common public RPCs (Not recommended for "real money" volume)
+  // 3. Last Resort: Common public RPCs
   const fallbacks: Record<string, string> = {
     'ethereum': 'https://cloudflare-eth.com',
     'polygon': 'https://polygon-rpc.com',
@@ -63,16 +69,14 @@ export function getProvider(rpcOrNetwork: string): JsonRpcProvider {
   }
 
   try {
-    // High-reliability fetch request with aggressive timeout
     const request = new FetchRequest(url);
     request.timeout = Number(process.env.RPC_TIMEOUT_MS) || 8000;
     
-    // Static Network: Set to true only for Mainnets to save 1 round-trip call
     const isMainnet = !rpcOrNetwork.toLowerCase().includes('testnet');
 
     const provider = new JsonRpcProvider(request, undefined, {
       staticNetwork: isMainnet,
-      batchMaxCount: 10, // Optimize multi-token scans into fewer network calls
+      batchMaxCount: 10,
       batchMaxSize: 1024 * 512 
     });
 
@@ -86,7 +90,6 @@ export function getProvider(rpcOrNetwork: string): JsonRpcProvider {
 
 /**
  * Resilient Health Check with Retry Logic
- * Vital for "real money" to ensure we don't send TXs to a dead node.
  */
 export async function getHealthyProvider(network: string): Promise<JsonRpcProvider> {
   const provider = getProvider(network);
@@ -95,10 +98,9 @@ export async function getHealthyProvider(network: string): Promise<JsonRpcProvid
     const block = await provider.getBlockNumber();
     if (!block) throw new Error('Dead Provider');
     return true;
-  }, 2, 1000); // 2 retries, 1s delay
+  }, 2, 1000);
 
   if (!isHealthy) {
-    // If Alchemy fails, try to force a public fallback URL
     logger.warn(`[Provider] Primary RPC for ${network} unhealthy. Attempting fallback...`);
     const fallbackUrl = getNetworkUrl(network); 
     return getProvider(fallbackUrl);
