@@ -5,25 +5,23 @@ import { flashbotsExecution } from '../../blockchain/flashbotsExecution.js';
 import { EVM_CHAINS } from '../../blockchain/chains.js';
 import { logger } from '../../utils/logger.js';
 import { prisma } from '../../config/database.js';
+import crypto from 'crypto';
 
 /**
- * Premium Burn Service - Tier 1 
- * Integrated with MEV-Shielding and Intelligence-driven batching.
- * Upgraded for Production: Handles Encrypted Keys and Multi-Chain Nonce logic.
+ * UPGRADED: Financial-grade Burn Service.
+ * Features: MEV-Shielding, Traceability, and strict Error-to-Hash mapping.
  */
 export const burnService = {
   /**
-   * Dynamically handles spam burning. 
-   * @param walletAddress The user's address
-   * @param encryptedPrivateKey Encrypted key from DB (v1:iv:tag:cipher)
-   * @param preScannedTokens Optional pre-filtered list
+   * Sanitizes wallets by burning malicious assets via private RPCs.
    */
   async executeSpamBurn(walletAddress: string, encryptedPrivateKey: string, preScannedTokens?: any[]) {
     const startTime = Date.now();
     const safeAddr = walletAddress.toLowerCase();
+    const traceId = `BURN-${crypto.randomUUID?.() || Date.now()}`;
 
     try {
-      logger.info(`[BurnService] Initiating Sanitization: ${safeAddr}`);
+      logger.info(`[BurnService][${traceId}] Initiating Sanitization: ${safeAddr}`);
 
       let spamTokens = preScannedTokens;
 
@@ -37,25 +35,24 @@ export const burnService = {
       if (!spamTokens || spamTokens.length === 0) {
         return {
           success: true,
-          message: 'Wallet is clean! No spam tokens detected.',
+          message: 'Wallet is clean!',
+          traceId,
           data: { burnedCount: 0, plans: [] }
         };
       }
 
-      // 2. BATCH PLANNING: Build the payloads
-      // Ensure batchBurnTokens is optimized for the latest gas prices
+      // 2. BATCH PLANNING
       const burnPlans = await batchBurnTokens(safeAddr, spamTokens);
       const executionResults = [];
 
-      // 3. DYNAMIC EXECUTION: Loop through plans and execute via Flashbots Bridge
+      // 3. DYNAMIC EXECUTION: Private Bundle Submission
       for (const plan of burnPlans) {
-        const chain = EVM_CHAINS.find(c => c.name === plan.chain);
+        const chain = EVM_CHAINS.find(c => c.name.toLowerCase() === plan.chain.toLowerCase());
         
-        // Safety: Only execute if we have a valid chain config and payloads
-        if (chain && plan.status === 'PROTECTED' && plan.payloads.length > 0) {
-          logger.info(`[BurnService] Sending ${plan.payloads.length} txs via Flashbots to ${plan.chain}...`);
+        if (chain && plan.payloads.length > 0) {
+          logger.info(`[BurnService][${traceId}] Sending ${plan.payloads.length} txs to ${plan.chain} via Flashbots...`);
           
-          // Pass the ENCRYPTED key directly; flashbotsExecution handles the decryption in-memory
+          // FlashbotsExecution handles the internal decryption of the v2 key
           const result = await flashbotsExecution.executeBundle(
             encryptedPrivateKey,
             chain.rpc,
@@ -71,46 +68,56 @@ export const burnService = {
           });
 
           if (result.success) {
-            logger.info(`[BurnService] Successfully cleared spam on ${plan.chain}`);
-          } else {
-            logger.warn(`[BurnService] Flashbots submission failed on ${plan.chain}: ${result.error}`);
+            logger.info(`[BurnService][${traceId}] Cleared spam on ${plan.chain} | Hash: ${result.txHash}`);
           }
         }
       }
 
-      // 4. PERSISTENCE & ANALYTICS: Update Health Score
-      // Real Money: We only reset health score if at least one burn succeeded
-      const hasSuccess = executionResults.some(r => r.success);
+      // 4. PERSISTENCE & ANALYTICS
+      const successfulExecutions = executionResults.filter(r => r.success);
+      const hasSuccess = successfulExecutions.length > 0;
       
-      await prisma.wallet.update({
-        where: { address: safeAddr },
-        data: { 
-          lastSynced: new Date(),
-          healthScore: hasSuccess ? 100 : undefined,
-          riskLevel: hasSuccess ? 'LOW' : undefined
-        }
-      }).catch((err: any) => logger.warn(`[BurnService] DB Sync skipped: ${err.message}`));
+      // Capture the main txHash for the worker to log
+      const primaryTxHash = hasSuccess ? successfulExecutions[0].txHash : null;
+
+      if (hasSuccess) {
+        await prisma.wallet.update({
+          where: { address: safeAddr },
+          data: { 
+            lastSynced: new Date(),
+            healthScore: 100,
+            riskLevel: 'LOW'
+          }
+        }).catch((err: any) => logger.warn(`[BurnService][${traceId}] DB Sync failed: ${err.message}`));
+      }
 
       const duration = (Date.now() - startTime) / 1000;
 
+      // RETURN: Structured to match worker expectations (top-level txHash + success)
       return {
-        success: true,
+        success: hasSuccess,
+        txHash: primaryTxHash, // REQUIRED for worker compatibility
+        traceId,
         wallet: safeAddr,
         latency: `${duration}s`,
         summary: {
           spamTokensFound: spamTokens.length,
-          totalChainsProcessed: executionResults.length,
-          successfulChains: executionResults.filter(r => r.success).length
+          successfulChains: successfulExecutions.length
         },
-        executionResults,
+        data: {
+          burnedCount: spamTokens.length,
+          plans: executionResults
+        },
         timestamp: new Date().toISOString()
       };
 
     } catch (error: any) {
-      logger.error(`[BurnService] Critical failure for ${safeAddr}: ${error.message}`);
+      logger.error(`[BurnService][${traceId}] Critical failure: ${error.stack}`);
       return {
         success: false,
-        error: 'Spam Burn Engine encountered an error',
+        txHash: null,
+        traceId,
+        error: 'Spam Burn Engine encountered an internal error',
         message: error.message
       };
     }

@@ -5,83 +5,100 @@ import { recoveryService } from '../modules/recovery/recovery.service.js';
 import { rulesEngine } from '../modules/automation/rulesEngine.js';
 import { logger } from '../utils/logger.js';
 import { mutex } from '../utils/mutex.js';
+import { helpers } from '../utils/helpers.js';
 
 /**
- * Tier 1 Automated Recovery Worker
- * Orchestrates: Mutex Lock -> Scan -> Rule Check -> Gas Guard -> Flashbots Execution.
+ * UPGRADED: Production-grade Automated Recovery Worker.
+ * Orchestrates: Atomic Mutex -> Batching -> Eligibility -> Gas Guard -> Execution.
  */
 export const startDustWorker = () => {
-  // Scheduled to run every 12 hours (Standard Maintenance Cycle)
+  // Scheduled for 12h maintenance cycle
   cron.schedule('0 */12 * * *', async () => {
-    // 1. MUTEX ACQUIRE: Prevent overlapping 12h cycles
-    const lockId = 'GLOBAL_DUST_RECOVERY';
-    const hasLock = await mutex.acquire(lockId);
+    const traceId = `DUST-WORKER-${Date.now()}`;
+    const globalLockId = 'GLOBAL_DUST_RECOVERY';
     
-    if (!hasLock) {
-      logger.warn(`[Worker: Dust] Cycle skipped: ${lockId} is already active.`);
+    // 1. ATOMIC GLOBAL LOCK: Prevents overlapping cycles across server clusters
+    const globalOwnerId = await mutex.acquire(globalLockId, 3600000); // 1hr TTL
+    
+    if (!globalOwnerId) {
+      logger.warn(`[Worker: Dust][${traceId}] Cycle skipped: ${globalLockId} is active.`);
       return;
     }
 
-    logger.info('[Worker: Dust] Lock acquired. Initiating recovery cycle...');
+    logger.info(`[Worker: Dust][${traceId}] Global lock acquired. Initiating cycle...`);
     
     try {
-      // 2. Fetch active automation rules from Prisma
+      // 2. BATCHED RETRIEVAL: Efficiently query only active recovery rules
       const activeRules = await prisma.automationRule.findMany({
-        where: { type: 'AUTO_RECOVERY', active: true }
+        where: { type: 'AUTO_RECOVERY', active: true },
+        include: { wallet: true }
       });
 
       if (activeRules.length === 0) {
-        logger.info('[Worker: Dust] No active auto-recovery rules found.');
+        logger.info(`[Worker: Dust][${traceId}] No active rules found.`);
         return;
       }
 
       for (const rule of activeRules) {
         const address = rule.walletAddress.toLowerCase();
-
-        // 3. GATING: Check NFT Membership Eligibility
-        const isEligible = await rulesEngine.isEligibleForAutomation(address);
-        if (!isEligible) {
-          logger.warn(`[Worker: Dust] ${address} lacks NFT Pass. Skipping.`);
-          continue;
-        }
-
-        // 4. GAS GUARD
-        const ruleData = rule as any;
-        const currentChainId = Number(ruleData.chainId || ruleData.chain || 1);
         
-        const canExecute = await rulesEngine.shouldExecuteNow(currentChainId, 30);
-        if (!canExecute) {
-            logger.info(`[Worker: Dust] Gas too high for ${address} on chain ${currentChainId}.`);
+        // 3. PER-WALLET LOCK: Prevents collision with manual user recoveries or other workers
+        const walletOwnerId = await mutex.acquire(`recovery:${address}`, 300000); // 5m TTL
+        if (!walletOwnerId) continue;
+
+        try {
+          // 4. GATING & ELIGIBILITY (NFT/Membership check)
+          const isEligible = await rulesEngine.isEligibleForAutomation(address);
+          if (!isEligible) {
+            logger.warn(`[Worker: Dust][${address}] Eligibility failed. Skipping.`);
             continue;
-        }
-
-        // 5. SCAN: Identify profitable targets
-        const profitable = await detectDustTokens(address);
-        
-        if (profitable.length > 0) {
-          logger.info(`[Worker: Dust] Found ${profitable.length} rescue targets for ${address}.`);
-          
-          // 6. EXECUTION: Upgraded with privateKey from the DB rule
-          const result = await recoveryService.executeDustRecovery(address, ruleData.privateKey);
-
-          if (result.success) {
-            logger.info(`[Worker: Dust] SUCCESS: Automated rescue completed for ${address}`);
-            
-            await prisma.wallet.update({
-              where: { address },
-              data: { lastSynced: new Date() }
-            });
-          } else {
-            logger.error(`[Worker: Dust] FAILED: Rescue for ${address}: ${result.error || 'Unknown error'}`);
           }
+
+          // 5. PRODUCTION GAS GUARD: Ensure tx remains profitable vs current network fees
+          const chainId = Number(rule.chain || 1);
+          const canExecute = await rulesEngine.shouldExecuteNow(chainId, 30);
+          if (!canExecute) {
+              logger.info(`[Worker: Dust][${address}] Gas too high on chain ${chainId}.`);
+              continue;
+          }
+
+          // 6. SCAN: Identify profitable dust targets
+          const profitable = await detectDustTokens(address);
+          
+          if (profitable && profitable.length > 0) {
+            logger.info(`[Worker: Dust][${address}] Found ${profitable.length} rescue targets.`);
+            
+            // 7. EXECUTION: High-reliability service call with encrypted key
+            const result = await recoveryService.executeDustRecovery(address, rule.privateKey);
+
+            if (result.success) {
+              logger.info(`[Worker: Dust][SUCCESS] Rescue completed for ${address} | TX: ${result.txHash || 'N/A'}`);
+              
+              await prisma.wallet.update({
+                where: { address: rule.walletAddress },
+                data: { lastSynced: new Date() }
+              });
+            } else {
+              logger.error(`[Worker: Dust][FAILED] Rescue for ${address}: ${result.error}`);
+            }
+          }
+
+          // 8. RATE-LIMIT JITTER: Avoid RPC 429 errors
+          await helpers.sleep(200);
+
+        } catch (walletErr: any) {
+          logger.error(`[Worker: Dust] Fatal error for ${address}: ${walletErr.message}`);
+        } finally {
+          // RELEASE PER-WALLET LOCK
+          await mutex.release(`recovery:${address}`, walletOwnerId);
         }
       }
     } catch (err: any) {
-      logger.error(`[Worker: Dust] Fatal Cycle Failure: ${err.message}`);
+      logger.error(`[Worker: Dust][${traceId}] Fatal Cycle Failure: ${err.stack}`);
     } finally {
-      // 7. MUTEX RELEASE: Release lock for the next 12h window
-      await mutex.release(lockId);
-      logger.info(`[Worker: Dust] Cycle finished. ${lockId} released.`);
+      // 9. RELEASE GLOBAL LOCK
+      await mutex.release(globalLockId, globalOwnerId);
+      logger.info(`[Worker: Dust][${traceId}] Cycle finished. Lock released.`);
     }
   });
 
