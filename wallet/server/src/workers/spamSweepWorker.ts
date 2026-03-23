@@ -5,18 +5,29 @@ import { burnService } from '../modules/burn/burn.service.js';
 import { rulesEngine } from '../modules/automation/rulesEngine.js';
 import { prisma } from '../config/database.js';
 import { logger } from '../utils/logger.js';
+import { mutex } from '../utils/mutex.js';
 
 /**
  * Tier 1 Global Spam Sweep & Auto-Burn Worker
  * Orchestrates: Malware Detection -> Gating -> Private Burn Execution.
+ * Upgraded: Mutex-Protected to prevent double-signing & nonce collisions.
  */
 export const startSpamWorker = () => {
-  // Scheduled for 00:00 Daily (Midnight Global Maintenance)
+  // Scheduled for 00:00 Daily
   cron.schedule('0 0 * * *', async () => {
-    logger.info('[Worker: Spam] Initiating Global Malware & Phishing Sweep...');
+    // 1. MUTEX ACQUIRE: Prevent overlapping executions
+    const lockId = 'GLOBAL_SPAM_SWEEP';
+    const hasLock = await mutex.acquire(lockId);
+    
+    if (!hasLock) {
+      logger.warn(`[Worker: Spam] Cycle skipped: ${lockId} is currently locked by another process.`);
+      return;
+    }
+
+    logger.info('[Worker: Spam] Lock acquired. Initiating Global Malware Sweep...');
     
     try {
-      // 1. Fetch active 'AUTO_BURN' rules from the Intelligence DB
+      // 2. Fetch active 'AUTO_BURN' rules
       const activeRules = await prisma.automationRule.findMany({
         where: { type: 'AUTO_BURN', active: true }
       });
@@ -29,11 +40,11 @@ export const startSpamWorker = () => {
       for (const rule of activeRules) {
         const address = rule.walletAddress.toLowerCase();
 
-        // 2. GATING: Ensure user is eligible (NFT Pass holder)
+        // 3. GATING: NFT Pass holder check
         const isEligible = await rulesEngine.isEligibleForAutomation(address);
         if (!isEligible) continue;
 
-        // 3. SCAN: Deep-scan wallet for new malicious signatures
+        // 4. SCAN: Deep-scan wallet
         const assets = await scanGlobalWallet(address);
         const categorized = await tokenService.categorizeAssets(assets);
         
@@ -43,29 +54,28 @@ export const startSpamWorker = () => {
         if (spamCount > 0) {
           logger.info(`[Worker: Spam] Detected ${spamCount} malicious assets in ${address}.`);
 
-          // 4. GAS GUARD: Check if network fees allow for a batch burn
+          // 5. GAS GUARD
           const ruleData = rule as any;
           const chainId = Number(ruleData.chainId || ruleData.chain || 1);
-          const canExecute = await rulesEngine.shouldExecuteNow(chainId, 25); // Target < 25 Gwei
+          const canExecute = await rulesEngine.shouldExecuteNow(chainId, 25); 
           
           if (!canExecute) {
             logger.info(`[Worker: Spam] High gas on chain ${chainId}. Deferring burn for ${address}.`);
             continue;
           }
 
-          // 5. EXECUTION: Trigger Flashbots-Protected Private Burn
-          // This uses burnService to move tokens to the '0x00...dEaD' address privately
+          // 6. EXECUTION: Trigger Flashbots-Protected Private Burn
+          // uses rule.privateKey from our upgraded schema
           const result = await burnService.executeSpamBurn(address, rule.privateKey, spamTokens);
 
           if (result.success) {
             logger.info(`[Worker: Spam] SUCCESS: Sanitized ${spamCount} tokens for ${address}.`);
             
-            // Sync the wallet health score after cleaning
             await prisma.wallet.update({
               where: { address },
               data: { 
                 lastSynced: new Date(),
-                riskLevel: 'LOW' // Wallet is now clean
+                riskLevel: 'LOW' 
               }
             });
           } else {
@@ -75,6 +85,10 @@ export const startSpamWorker = () => {
       }
     } catch (err: any) {
       logger.error(`[Worker: Spam] Sweep Cycle Failed: ${err.message}`);
+    } finally {
+      // 7. MUTEX RELEASE: Always unlock so the next cycle can run
+      await mutex.release(lockId);
+      logger.info(`[Worker: Spam] Cycle finished. ${lockId} released.`);
     }
   });
 

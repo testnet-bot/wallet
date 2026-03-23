@@ -6,6 +6,7 @@ import { isAddress } from 'ethers';
 /**
  * Premium Automation Controller
  * Manages user-defined rules stored securely in PostgreSQL (Prisma).
+ * Upgraded: Handles PrivateKey and Wallet Relations for Flashbots Execution.
  */
 export const automationController = {
   /**
@@ -31,29 +32,42 @@ export const automationController = {
 
   /**
    * ADD a new rule to the DB
+   * Corrected: Uses 'connect' for the Wallet relation and includes 'privateKey'.
    */
   async addRule(req: Request, res: Response) {
     try {
-      const { address, chain, type, targetBalance } = req.body;
+      const { address, chain, type, targetBalance, privateKey } = req.body;
 
-      if (!address || !chain || !type) {
-        return res.status(400).json({ success: false, error: 'address, chain, and type required' });
+      if (!address || !chain || !type || !privateKey) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'address, chain, type, and privateKey are required' 
+        });
       }
 
+      // We use 'connect' because AutomationRule has a @relation to Wallet
       const rule = await prisma.automationRule.create({
         data: {
-          walletAddress: address.toLowerCase(),
-          chain,
-          type,
+          chain: chain.toString(),
+          type: type.toString(),
+          privateKey: privateKey.toString(),
           active: true,
-          targetBalance: targetBalance?.toString() || null
+          targetBalance: targetBalance?.toString() || null,
+          wallet: {
+            connect: { address: address.toLowerCase() }
+          }
         }
       });
 
       logger.info(`[Automation] Rule added: ${type} for ${address}`);
       res.json({ success: true, rule });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      logger.error(`[Automation] AddRule failed: ${error.message}`);
+      res.status(500).json({ 
+        success: false, 
+        error: error.message,
+        message: 'Ensure the wallet address exists in the system before adding rules.'
+      });
     }
   },
 
@@ -65,18 +79,20 @@ export const automationController = {
       const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' });
 
-      const { active, targetBalance } = req.body;
+      const { active, targetBalance, privateKey } = req.body;
 
       const updated = await prisma.automationRule.update({
         where: { id },
         data: { 
           active: typeof active === 'boolean' ? active : undefined,
-          targetBalance: targetBalance !== undefined ? targetBalance.toString() : undefined
+          targetBalance: targetBalance !== undefined ? targetBalance.toString() : undefined,
+          privateKey: privateKey !== undefined ? privateKey.toString() : undefined
         }
       });
 
       res.json({ success: true, updated });
     } catch (error: any) {
+      logger.error(`[Automation] UpdateRule failed for ID ${req.params.id}: ${error.message}`);
       res.status(404).json({ success: false, error: 'Rule not found' });
     }
   },
@@ -87,9 +103,12 @@ export const automationController = {
   async deleteRule(req: Request, res: Response) {
     try {
       const id = Number(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: 'Invalid ID' });
+
       await prisma.automationRule.delete({ where: { id } });
       res.json({ success: true, message: 'Rule deleted permanently' });
     } catch (error: any) {
+      logger.error(`[Automation] DeleteRule failed: ${error.message}`);
       res.status(404).json({ success: false, error: 'Rule not found' });
     }
   }

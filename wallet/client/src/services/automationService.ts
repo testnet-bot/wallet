@@ -1,48 +1,81 @@
-// ─── FILE: client/services/automationService.ts ─────────────────────────
-// Full CRUD + live log streaming for automation rules
-
 import apiClient from './apiClient';
-import type { AutomationRule, AutomationLog, AutomationStats } from '../hooks/useAutomation';
+
+/**
+ * Premium Automation Service
+ * Upgraded: Handles PrivateKey injection for Flashbots-shielded background execution.
+ */
+
+export interface AutomationRule {
+  id: number;
+  walletAddress: string;
+  type: 'AUTO_BURN' | 'AUTO_RECOVERY';
+  chain: string;
+  active: boolean;
+  targetBalance?: string;
+  createdAt: string;
+}
 
 export interface CreateRulePayload {
-  type:        AutomationRule['type'];
-  label:       string;
-  description: string;
-  enabled:     boolean;
-  config:      Record<string, any>;
+  type: 'AUTO_BURN' | 'AUTO_RECOVERY';
+  chain: string;
+  privateKey: string; // Required for the Backend Engine to sign bundles
+  targetBalance?: string;
 }
 
 export const automationService = {
-  // ─── Rules ───────────────────────────────────────────────
-  getRules: (walletAddress: string) =>
-    apiClient.get<AutomationRule[]>(`/automation/${walletAddress}/rules`),
+  // ─── Rules Management ────────────────────────────────────
+  
+  /**
+   * Fetches all rules for a wallet.
+   * Matches Backend: GET /api/automation/rules?address=...
+   */
+  getRules: (address: string) =>
+    apiClient.get<{ success: boolean; rules: AutomationRule[] }>(`/automation/rules?address=${address}`),
 
-  createRule: (walletAddress: string, payload: CreateRulePayload) =>
-    apiClient.post<AutomationRule>(`/automation/${walletAddress}/rules`, payload),
+  /**
+   * Creates a new rule with PrivateKey for workers.
+   * Matches Backend: POST /api/automation/rules
+   */
+  createRule: (address: string, payload: CreateRulePayload) =>
+    apiClient.post<{ success: boolean; rule: AutomationRule }>('/automation/rules', {
+      address,
+      ...payload
+    }),
 
-  updateRule: (walletAddress: string, ruleId: string, config: Record<string, any>) =>
-    apiClient.put<AutomationRule>(`/automation/${walletAddress}/rules/${ruleId}`, { config }),
+  /**
+   * Updates an existing rule (Toggle active or change config)
+   * Matches Backend: PATCH /api/automation/rules/:id
+   */
+  updateRule: (id: number, data: { active?: boolean; targetBalance?: string; privateKey?: string }) =>
+    apiClient.patch<{ success: boolean; updated: AutomationRule }>(`/automation/rules/${id}`, data),
 
-  toggleRule: (walletAddress: string, ruleId: string, enabled: boolean) =>
-    apiClient.patch<AutomationRule>(`/automation/${walletAddress}/rules/${ruleId}`, { enabled }),
+  /**
+   * Deletes a rule permanently.
+   * Matches Backend: DELETE /api/automation/rules/:id
+   */
+  deleteRule: (id: number) =>
+    apiClient.delete<{ success: boolean; message: string }>(`/automation/rules/${id}`),
 
-  deleteRule: (walletAddress: string, ruleId: string) =>
-    apiClient.delete(`/automation/${walletAddress}/rules/${ruleId}`),
+  // ─── Logs & Streaming ────────────────────────────────────
 
-  // ─── Logs ────────────────────────────────────────────────
-  getLogs: (walletAddress: string, limit = 50) =>
-    apiClient.get<AutomationLog[]>(`/automation/${walletAddress}/logs`, { limit }),
-
+  /**
+   * Real-time Log Streaming via SSE (Server-Sent Events)
+   * Connects to the Worker output for live status updates.
+   */
   subscribeLogs: (
-    walletAddress: string,
-    onLog: (log: AutomationLog) => void,
+    address: string,
+    onLog: (log: any) => void,
     onError?: (err: Event) => void
   ): (() => void) => {
-    const base = import.meta.env.VITE_API_URL ?? 'http://localhost:3001/api';
-    const source = new EventSource(`${base}/automation/${walletAddress}/logs/stream`);
+    const base = import.meta.env.VITE_API_URL || 'http://localhost:3001/api';
+    const source = new EventSource(`${base}/automation/logs/stream?address=${address}`);
 
     source.onmessage = (e) => {
-      try { onLog(JSON.parse(e.data)); } catch { /* ignore malformed events */ }
+      try { 
+        onLog(JSON.parse(e.data)); 
+      } catch { 
+        /* ignore malformed events */ 
+      }
     };
 
     if (onError) source.onerror = onError;
@@ -50,9 +83,11 @@ export const automationService = {
     return () => source.close();
   },
 
-  // ─── Stats ──────────────────────────────────────────────
-  getStats: (walletAddress: string) =>
-    apiClient.get<AutomationStats>(`/automation/${walletAddress}/stats`),
+  /**
+   * Fetches Historical Automation Stats
+   */
+  getStats: (address: string) =>
+    apiClient.get(`/automation/stats?address=${address}`),
 };
 
 export default automationService;

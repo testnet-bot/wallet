@@ -19,7 +19,7 @@ const ALCHEMY_KEY = process.env.ALCHEMY_KEY || '';
 
 const getDynamicRpc = (publicRpc: string, alchemyAlias?: string): string => {
   if (ALCHEMY_KEY && alchemyAlias) {
-    return `https://${alchemyAlias}://{ALCHEMY_KEY}`;
+  return `https://${alchemyAlias}.g.alchemy.com/v2/${ALCHEMY_KEY}`;
   }
   return publicRpc;
 };

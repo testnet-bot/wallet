@@ -25,7 +25,6 @@ export const automationService = {
     }
 
     // 2. Load User Rules from Prisma
-    // Explicitly typing the response from Prisma to fix implicit 'any' errors
     const userRules = await prisma.automationRule.findMany({
       where: { walletAddress: safeAddr, active: true }
     });
@@ -36,42 +35,40 @@ export const automationService = {
     }
 
     // 3. Conditional Execution Logic
-    const hasBurnRule = userRules.some((r: any) => r.type === 'AUTO_BURN');
-    const hasRecoveryRule = userRules.some((r: any) => r.type === 'AUTO_RECOVERY');
+    // Find specific rules to extract their unique properties (like privateKey)
+    const burnRule = userRules.find((r: any) => r.type === 'AUTO_BURN');
+    const recoveryRule = userRules.find((r: any) => r.type === 'AUTO_RECOVERY');
 
-    logger.info(`[Automation] Holder: ${safeAddr} | Rules: Burn(${hasBurnRule}) Recovery(${hasRecoveryRule})`);
+    logger.info(`[Automation] Holder: ${safeAddr} | Rules: Burn(${!!burnRule}) Recovery(${!!recoveryRule})`);
 
-    // FIX: Explicitly type the task array to satisfy TypeScript (2339 / 7005)
     const taskNames: string[] = [];
     const tasks: Promise<any>[] = [];
 
-    if (hasBurnRule) {
-      tasks.push(burnService.executeSpamBurn(safeAddr, rule.privateKey));
+    // 4. TASK PUSHING (Upgraded with PrivateKey injection)
+    if (burnRule) {
+      // Fix: Use the privateKey from the specific burnRule object
+      tasks.push(burnService.executeSpamBurn(safeAddr, burnRule.privateKey));
       taskNames.push('BURN');
     }
     
-    if (hasRecoveryRule) {
-      tasks.push(recoveryService.executeDustRecovery(safeAddr));
+    if (recoveryRule) {
+      // Fix: recoveryService now also expects a privateKey for Flashbots execution
+      tasks.push(recoveryService.executeDustRecovery(safeAddr, recoveryRule.privateKey));
       taskNames.push('RECOVERY');
     }
 
     if (tasks.length === 0) return { status: 'IDLE', wallet: safeAddr };
 
-    // 4. Parallel execution
-    // Promise.allSettled is vital for production so one failed task doesn't kill the other
+    // 5. Parallel execution
     const results = await Promise.allSettled(tasks);
 
-    // 5. Cleanup & Persistence
-    // Added a more descriptive update to track the last sync accurately
+    // 6. Cleanup & Persistence
     await prisma.wallet.update({
       where: { address: safeAddr },
-      data: { 
-        lastSynced: new Date()
-        // Pro-tip: You could add a 'status' field here to show "Healthy" in the UI
-      }
+      data: { lastSynced: new Date() }
     }).catch((e: any) => logger.warn(`[Automation] DB Sync Error for ${safeAddr}: ${e.message}`));
 
-    // 6. Enhanced Production Response
+    // 7. Enhanced Production Response
     return {
       status: 'SUCCESS',
       wallet: safeAddr,
@@ -80,7 +77,6 @@ export const automationService = {
       details: results.map((res: any, i: number) => ({
         task: taskNames[i],
         status: res.status,
-        // Production addition: capture the actual error reason for your logs/UI
         error: res.status === 'rejected' ? (res.reason?.message || res.reason) : null,
         result: res.status === 'fulfilled' ? 'SUCCESS' : 'FAILED'
       }))

@@ -25,6 +25,7 @@
     "helmet": "^7.1.0",
     "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
+    "p-limit": "^7.3.0",
     "pg": "^8.20.0"
   },
   "devDependencies": {

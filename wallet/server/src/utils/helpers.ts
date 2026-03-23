@@ -69,4 +69,18 @@ export const helpers = {
   }
 };
 
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  retries = 2,
+  delay = 300
+  ): Promise<T> {
+  try {
+  return await fn();
+  } catch (err) {
+  if (retries <= 0) throw err;
+  await new Promise(res => setTimeout(res, delay));
+  return withRetry(fn, retries - 1, delay);
+  }
+  }
+
 export default helpers;

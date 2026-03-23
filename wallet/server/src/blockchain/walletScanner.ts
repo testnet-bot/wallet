@@ -2,6 +2,7 @@ import { formatEther, formatUnits, getAddress } from 'ethers';
 import { EVM_CHAINS, ChainConfig } from './chains.js';
 import { getProvider, getAlchemyUrl } from './provider.js';
 import { fetchFromCovalent, fetchFromMoralis, AggregatedToken } from './aggregator.js';
+import pLimit from 'p-limit';
 
 export interface FinalAsset {
   chain: string;
@@ -38,10 +39,12 @@ async function fetchMeta(url: string, contract: string) {
  * Optimized for high-concurrency and multi-source reliability.
  */
 export async function scanGlobalWallet(address: string): Promise<FinalAsset[]> {
+const limit = pLimit(5);
   // Standardize address to prevent checksum mismatches
   const safeAddress = getAddress(address);
 
-  const tasks = EVM_CHAINS.map(async (chain: ChainConfig): Promise<FinalAsset[]> => {
+  const tasks = EVM_CHAINS.map((chain: ChainConfig) =>
+    limit(async (): Promise<FinalAsset[]> => {
     try {
       const provider = getProvider(chain.rpc);
       let chainAssets: FinalAsset[] = [];
@@ -117,7 +120,8 @@ export async function scanGlobalWallet(address: string): Promise<FinalAsset[]> {
       console.error(`[Scanner] Error on ${chain.name}:`, err);
       return []; 
     }
-  });
+    })
+    );
 
   const results = await Promise.all(tasks);
   const allAssets = results.flat();

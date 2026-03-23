@@ -60,3 +60,8 @@ model RecoveryAttempt {
   createdAt         DateTime @default(now())
   @@index([walletAddress])
 }
+model SystemLock {
+    id        String   @id 
+      isLocked  Boolean  @default(false)
+        updatedAt DateTime @updatedAt
+}
