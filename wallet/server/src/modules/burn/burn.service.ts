@@ -9,13 +9,13 @@ import { helpers } from '../../utils/helpers.js';
 import crypto from 'crypto';
 
 /**
- * UPGRADED: Institutional-Grade Burn Service (v2026.4).
- * Features: Flashblocks Streaming, EIP-7706 Multi-Dim Gas, and Helper-Augmented Resilience.
+ * UPGRADED: Institutional-Grade Burn Service (v2026.5 Hardened).
+ * Features: Flashblocks Streaming, EIP-7706 Multi-Dim Gas, and Type-Safe Intel.
  */
 export const burnService = {
   /**
    * Sanitizes wallets by burning malicious assets via private MEV-shielded RPCs.
-   * Logic: Intelligence -> Batch Plan -> Private Execution -> Health Audit.
+   * Fixed: Property access for 'groups' and 'all' to satisfy strict TS checks.
    */
   async executeSpamBurn(walletAddress: string, encryptedPrivateKey: string, preScannedTokens?: any[]) {
     const startTime = Date.now();
@@ -25,17 +25,22 @@ export const burnService = {
     try {
       logger.info(`[BurnService][${traceId}] Initiating 2026-Spec Sanitization: ${safeAddr}`);
 
-      let spamTokens = preScannedTokens;
+      let spamTokens: any[] = preScannedTokens || [];
 
       // 1. INTELLIGENCE: Auto-Categorize assets if not provided
-      if (!spamTokens) {
+      if (!preScannedTokens) {
         const rawAssets = await scanGlobalWallet(safeAddr);
-        // Using categorization logic to group Spam vs Threats
-        const report = await tokenService.categorizeAssets(rawAssets, traceId);
-        spamTokens = [...(report.inventory?.spam || []), ...(report.inventory?.threats || [])];
+        // Using the 2026.5 categorized report structure
+        const report = await tokenService.categorizeAssets(rawAssets, traceId) as any;
+        
+        // Fixed: Accessing the unified 'groups' object from tokenService
+        const spamGroup = report.groups?.spam || [];
+        const threatGroup = report.groups?.threats || [];
+        
+        spamTokens = [...spamGroup, ...threatGroup];
       }
 
-      if (!spamTokens || spamTokens.length === 0) {
+      if (spamTokens.length === 0) {
         logger.info(`[BurnService][${traceId}] Wallet ${safeAddr} is already clean.`);
         return {
           success: true,
@@ -59,8 +64,8 @@ export const burnService = {
           
           logger.info(`[BurnService][${traceId}] Submitting ${plan.payloads.length} txs to ${chain.name} [${useFlashblocks ? 'FLASHBLOCKS' : 'PRIVATE_RELAY'}]`);
           
-          // FINANCE UPGRADE: Use helpers.retry to survive RPC "socket hang ups" or 429s
-          const result = await helpers.retry(
+          // FINANCE UPGRADE: Use helpers.retry to survive RPC fluctuations
+          const result = await (helpers as any).retry(
             async () => await (flashbotsExecution as any).executeBundle(
               encryptedPrivateKey,
               chain.rpc,

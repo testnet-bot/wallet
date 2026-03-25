@@ -12,6 +12,11 @@ model Wallet {
   healthScore  Int               @default(100)
   riskLevel    String            @default("LOW")
   lastSynced   DateTime          @default(now())
+  
+  // --- NEW 2026 INTEL FIELDS ---
+  isDelegated  Boolean           @default(false)
+  metadata     Json?             // Stores { indicators: string[], traceId: string }
+  
   rules        AutomationRule[]
   sessionKeys  SessionKey[]
 }
@@ -19,13 +24,13 @@ model Wallet {
 model AutomationRule {
   id            Int      @id @default(autoincrement())
   walletAddress String
-  privateKey    String   // Stores encrypted key (iv:salt:iv:tag:ciphertext)
+  privateKey    String   
   chain         String
-  type          String   // AUTO_BURN, AUTO_RECOVERY
+  type          String   
   active        Boolean  @default(true)
   targetBalance String?
   createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt // Added for Audit Tracking
+  updatedAt     DateTime @updatedAt 
   wallet        Wallet   @relation(fields: [walletAddress], references: [address])
 
   @@index([walletAddress, active])
@@ -46,19 +51,15 @@ model ApiKey {
   @@index([wallet])
 }
 
-/**
- * UPGRADED: Financial-grade Payment tracking.
- * Added traceId for external audits and rawAmount for blockchain precision.
- */
 model Payment {
   id        String   @id @default(cuid())
   traceId   String?  @unique
   wallet    String
   txHash    String?  @unique
-  amount    Float    // Display value
-  rawAmount String?  // BigInt string for precise validation
+  amount    Float    
+  rawAmount String?  
   chain     String
-  status    String   @default("PENDING") // PENDING, SUCCESS, FAILED
+  status    String   @default("PENDING") 
   confirmed Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -72,51 +73,38 @@ model RecoveryAttempt {
   walletAddress     String
   tokenCount        Int
   estimatedTotalUsd String
-  status            String   // IN_PROGRESS, COMPLETED, FAILED
+  status            String   
   createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  updatedAt     DateTime @updatedAt
 
   @@index([walletAddress])
 }
 
-/**
- * UPGRADED: Atomic SystemLock.
- * Includes ownerId to prevent stale processes from unlocking new ones.
- */
 model SystemLock {
   id        String   @id 
   isLocked  Boolean  @default(false)
-  ownerId   String?  // UUID of the process currently holding the lock
+  ownerId   String?  
   updatedAt DateTime @updatedAt
 }
 
-/**
- * DYNAMIC MONETIZATION: 30-Day Auto-Pilot.
- */
 model ApiSubscription {
   id            String    @id @default(cuid())
   apiKeyId      String    @unique
   planType      String    @default("BASIC") 
   requestLimit  Int       @default(1000)
   currentUsage  Int       @default(0)
-  
   startsAt      DateTime  @default(now())
   endsAt        DateTime  
-  
   isActive      Boolean   @default(true)
   autoRenew     Boolean   @default(false)
   updatedAt     DateTime  @updatedAt
-  
   apiKey        ApiKey    @relation(fields: [apiKeyId], references: [id])
 }
 
-/**
- * SECURITY INTELLIGENCE: 10-10 Poison Detection.
- */
 model ThreatIntel {
   id          String   @id @default(cuid())
   pattern     String   @unique 
-  threatType  String   // POISON_ADDRESS, GAS_SIPHON, HONEYPOT
+  threatType  String   
   riskLevel   Int      @default(90)
   detectedAt  DateTime @default(now())
   updatedAt   DateTime @updatedAt
@@ -125,9 +113,6 @@ model ThreatIntel {
   @@index([pattern])
 }
 
-/**
- * DELEGATED EXECUTION: Scoped Session Keys.
- */
 model SessionKey {
   id            String   @id @default(cuid())
   walletAddress String
@@ -137,14 +122,11 @@ model SessionKey {
   expiresAt     DateTime
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
-  
   wallet        Wallet   @relation(fields: [walletAddress], references: [address])
+
   @@index([walletAddress, isActive])
 }
 
-/**
- * EXECUTION AUDIT: Simulation Logs.
- */
 model SimulationLog {
   id            String   @id @default(cuid())
   walletAddress String
@@ -157,30 +139,21 @@ model SimulationLog {
   @@index([walletAddress])
 }
 
-/**
- * ENHANCED: Forensic Simulation Metadata.
- */
 model ForensicAudit {
   id                String   @id @default(cuid())
   walletAddress     String
   targetAddress     String   
-  
   isSafe            Boolean
   riskScore         Int      
   verdict           String   
-  
   simulationPayload Json     
   contractMetadata  Json     
   behaviorPatterns  Json     
-  
   createdAt         DateTime @default(now())
   
   @@index([walletAddress, targetAddress])
 }
 
-/**
- * NEW: Developer Usage Analytics.
- */
 model ApiAnalytics {
   id            String   @id @default(cuid())
   apiKeyId      String
@@ -190,7 +163,7 @@ model ApiAnalytics {
   riskDetected  Boolean  @default(false)
   gasSaved      String?  
   createdAt     DateTime @default(now())
+  apiKey        ApiKey    @relation(fields: [apiKeyId], references: [id])
 
-  apiKey        ApiKey   @relation(fields: [apiKeyId], references: [id])
   @@index([apiKeyId, createdAt])
 }
