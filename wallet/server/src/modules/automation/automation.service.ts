@@ -3,98 +3,127 @@ import { burnService } from '../burn/burn.service.js';
 import { recoveryService } from '../recovery/recovery.service.js';
 import { logger } from '../../utils/logger.js';
 import { prisma } from '../../config/database.js';
+import { getAddress } from 'ethers';
 
 /**
- * Premium Automation Service
- * Orchestrates tasks based on NFT Gating and User-Defined DB Rules.
- * Upgraded with Concurrency Locking for Real-World Funds.
+ * UPGRADED: Production-Grade Automation Orchestrator (The Butler).
+ * Features: Sequential Nonce Safety, Auto-Circuit Breaking, and Tiered Gating.
+ * Ensures "Real Money" movements are serialised to prevent nonce collisions.
  */
 export const automationService = {
-  // Prevent parallel execution on the same wallet (Nonce Protection)
+  // Prevent parallel execution on the same wallet (Strict Nonce Protection)
   activeLocks: new Set<string>(),
+  // Tracking last execution to prevent RPC/Gas Spam
+  lastProcessTime: new Map<string, number>(),
 
   /**
    * Background Execution Engine
-   * Includes Concurrency Locking and Detailed Error Tracking.
+   * Logic: Guard -> Gate -> Load -> Serial Execute -> Cleanup.
    */
   async processAutomatedTasks(walletAddress: string) {
-    const safeAddr = walletAddress.toLowerCase();
+    const safeAddr = getAddress(walletAddress).toLowerCase();
+    const now = Date.now();
 
-    // 1. CONCURRENCY LOCK: Vital for real money to prevent nonce collisions
+    // 1. RATE LIMIT GUARD: 60s Cooldown for Finance Stability
+    const lastRun = this.lastProcessTime.get(safeAddr) || 0;
+    if (now - lastRun < 60000) {
+       return { status: 'SKIPPED', reason: 'RATE_LIMIT_COOLDOWN', wallet: safeAddr };
+    }
+
+    // 2. CONCURRENCY LOCK: Prevents multiple processes from using the same Nonce
     if (this.activeLocks.has(safeAddr)) {
-      logger.warn(`[Automation] Wallet ${safeAddr} is already busy. Skipping to avoid collision.`);
-      return { status: 'LOCKED', reason: 'ALREADY_PROCESSING' };
+      logger.warn(`[Automation] Wallet ${safeAddr} is locked. Skipping to prevent nonce collision.`);
+      return { status: 'LOCKED', reason: 'ALREADY_PROCESSING', wallet: safeAddr };
     }
 
     try {
       this.activeLocks.add(safeAddr);
+      this.lastProcessTime.set(safeAddr, now);
 
-      // 2. Gating: Check Base NFT Membership
-      const isEligible = await rulesEngine.isEligibleForAutomation(safeAddr);
-
-      if (!isEligible) {
-        logger.info(`[Automation] Wallet ${safeAddr} - No NFT. Skipping auto-cycle.`);
-        return { status: 'SKIPPED', reason: 'NOT_A_HOLDER' };
+      // 3. GATING: Tiered Membership Check
+      const membership = await rulesEngine.getMembershipTier(safeAddr);
+      if (!membership.isEligible) {
+        logger.info(`[Automation] Wallet ${safeAddr} - No Membership Found.`);
+        return { status: 'SKIPPED', reason: 'NOT_A_HOLDER', wallet: safeAddr };
       }
 
-      // 3. Load User Rules from Prisma
+      // 4. LOAD ACTIVE RULES
       const userRules = await prisma.automationRule.findMany({
-        where: { walletAddress: safeAddr, active: true }
+        where: { walletAddress: safeAddr, active: true },
+        orderBy: { createdAt: 'asc' }
       });
 
       if (userRules.length === 0) {
-        logger.info(`[Automation] Holder ${safeAddr} has no active rules. Skipping.`);
-        return { status: 'SKIPPED', reason: 'NO_ACTIVE_RULES' };
+        return { status: 'SKIPPED', reason: 'NO_ACTIVE_RULES', wallet: safeAddr };
       }
 
-      // 4. Conditional Execution Logic
-      const burnRule = userRules.find((r: any) => r.type === 'AUTO_BURN');
-      const recoveryRule = userRules.find((r: any) => r.type === 'AUTO_RECOVERY');
+      logger.info(`[Automation] Executing Butler for ${safeAddr} | Tier: ${membership.tier}`);
 
-      logger.info(`[Automation] Holder: ${safeAddr} | Rules: Burn(${!!burnRule}) Recovery(${!!recoveryRule})`);
+      const executionResults = [];
 
-      const taskNames: string[] = [];
-      const tasks: Promise<any>[] = [];
-
-      // 5. TASK PUSHING (Passing encrypted keys to downstream services)
-      if (burnRule) {
-        tasks.push(burnService.executeSpamBurn(safeAddr, burnRule.privateKey));
-        taskNames.push('BURN');
-      }
+      // 5. SERIAL EXECUTION (CRITICAL UPGRADE)
+      // We process tasks one-by-one. Parallel execution on one wallet fails nonces.
+      // Priority: 1. Recovery (Save Assets) -> 2. Burn (Cleanup Spam)
       
+      const recoveryRule = userRules.find((r: any) => r.type === 'AUTO_RECOVERY');
       if (recoveryRule) {
-        tasks.push(recoveryService.executeDustRecovery(safeAddr, recoveryRule.privateKey));
-        taskNames.push('RECOVERY');
+        try {
+          const result = await recoveryService.executeDustRecovery(safeAddr, recoveryRule.privateKey);
+          executionResults.push({ task: 'RECOVERY', status: 'SUCCESS', data: result });
+        } catch (err: any) {
+          executionResults.push({ task: 'RECOVERY', status: 'FAILED', error: err.message });
+          await this.handleRuleFailure(recoveryRule.id, err.message, safeAddr);
+        }
       }
 
-      if (tasks.length === 0) return { status: 'IDLE', wallet: safeAddr };
+      const burnRule = userRules.find((r: any) => r.type === 'AUTO_BURN');
+      if (burnRule) {
+        try {
+          const result = await burnService.executeSpamBurn(safeAddr, burnRule.privateKey);
+          executionResults.push({ task: 'BURN', status: 'SUCCESS', data: result });
+        } catch (err: any) {
+          executionResults.push({ task: 'BURN', status: 'FAILED', error: err.message });
+          await this.handleRuleFailure(burnRule.id, err.message, safeAddr);
+        }
+      }
 
-      // 6. Parallel execution
-      const results = await Promise.allSettled(tasks);
-
-      // 7. Cleanup & Persistence
+      // 6. DB PERSISTENCE & AUDIT
       await prisma.wallet.update({
         where: { address: safeAddr },
         data: { lastSynced: new Date() }
-      }).catch((e: any) => logger.warn(`[Automation] DB Sync Error for ${safeAddr}: ${e.message}`));
+      }).catch((e: any) => logger.error(`[Automation] Sync Persistence Fail: ${e.message}`));
 
-      // 8. Enhanced Production Response
       return {
-        status: 'SUCCESS',
+        status: 'COMPLETE',
         wallet: safeAddr,
-        tasksExecuted: tasks.length,
-        timestamp: new Date().toISOString(),
-        details: results.map((res: any, i: number) => ({
-          task: taskNames[i],
-          status: res.status,
-          error: res.status === 'rejected' ? (res.reason?.message || res.reason) : null,
-          result: res.status === 'fulfilled' ? 'SUCCESS' : 'FAILED'
-        }))
+        tier: membership.tier,
+        results: executionResults,
+        timestamp: new Date().toISOString()
       };
       
+    } catch (globalErr: any) {
+      logger.error(`[Automation] Fatal Orchestration Error for ${safeAddr}: ${globalErr.message}`);
+      throw globalErr;
     } finally {
-      // 9. RELEASE LOCK: Ensure the wallet can be processed in the next cycle
+      // 7. RELEASE LOCK
       this.activeLocks.delete(safeAddr);
+    }
+  },
+
+  /**
+   * INTERNAL: Circuit Breaker
+   * Disables rules that have compromised or invalid private keys.
+   */
+  async handleRuleFailure(ruleId: number, errorMessage: string, address: string) {
+    const criticalErrors = ['invalid hex string', 'wrong password', 'insufficient funds', 'invalid private key'];
+    const isCritical = criticalErrors.some(e => errorMessage.toLowerCase().includes(e));
+
+    if (isCritical) {
+      logger.error(`[Automation] Circuit Breaker: Disabling Rule ${ruleId} for ${address} due to: ${errorMessage}`);
+      await prisma.automationRule.update({
+        where: { id: ruleId },
+        data: { active: false }
+      }).catch(() => {});
     }
   }
 };

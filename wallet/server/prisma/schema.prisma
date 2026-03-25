@@ -7,12 +7,13 @@ datasource db {
 }
 
 model Wallet {
-  address     String   @id
-  balance     String
-  healthScore Int      @default(100)
-  riskLevel   String   @default("LOW")
-  lastSynced  DateTime @default(now())
-  rules       AutomationRule[]
+  address      String            @id
+  balance      String
+  healthScore  Int               @default(100)
+  riskLevel    String            @default("LOW")
+  lastSynced   DateTime          @default(now())
+  rules        AutomationRule[]
+  sessionKeys  SessionKey[]
 }
 
 model AutomationRule {
@@ -24,18 +25,24 @@ model AutomationRule {
   active        Boolean  @default(true)
   targetBalance String?
   createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt // Added for Audit Tracking
   wallet        Wallet   @relation(fields: [walletAddress], references: [address])
 
   @@index([walletAddress, active])
 }
 
 model ApiKey {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  wallet    String   @unique
-  plan      String
-  createdAt DateTime @default(now())
-  usage     Int      @default(0)
+  id           String           @id @default(cuid())
+  key          String           @unique
+  wallet       String           @unique
+  plan         String
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  lastActive   DateTime         @default(now())
+  usage        Int              @default(0)
+  subscription ApiSubscription?
+  analytics    ApiAnalytics[]
+
   @@index([wallet])
 }
 
@@ -54,6 +61,8 @@ model Payment {
   status    String   @default("PENDING") // PENDING, SUCCESS, FAILED
   confirmed Boolean  @default(false)
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([wallet, status])
 }
 
@@ -65,6 +74,8 @@ model RecoveryAttempt {
   estimatedTotalUsd String
   status            String   // IN_PROGRESS, COMPLETED, FAILED
   createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
   @@index([walletAddress])
 }
 
@@ -81,35 +92,34 @@ model SystemLock {
 
 /**
  * DYNAMIC MONETIZATION: 30-Day Auto-Pilot.
- * This extends the ApiKey logic to handle the 0/1,000 requests limit.
  */
 model ApiSubscription {
   id            String    @id @default(cuid())
   apiKeyId      String    @unique
-  planType      String    @default("BASIC") // 0 Plan
+  planType      String    @default("BASIC") 
   requestLimit  Int       @default(1000)
   currentUsage  Int       @default(0)
   
-  // The 30-Day Window
   startsAt      DateTime  @default(now())
-  endsAt        DateTime  // Logic: set to now() + 30 days on payment
+  endsAt        DateTime  
   
   isActive      Boolean   @default(true)
   autoRenew     Boolean   @default(false)
+  updatedAt     DateTime  @updatedAt
   
   apiKey        ApiKey    @relation(fields: [apiKeyId], references: [id])
 }
 
 /**
  * SECURITY INTELLIGENCE: 10-10 Poison Detection.
- * Stores identified vanity spoofing patterns to protect all users/devs.
  */
 model ThreatIntel {
   id          String   @id @default(cuid())
-  pattern     String   @unique // The '10-10' character string or full address
+  pattern     String   @unique 
   threatType  String   // POISON_ADDRESS, GAS_SIPHON, HONEYPOT
   riskLevel   Int      @default(90)
   detectedAt  DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   occurrences Int      @default(1)
   
   @@index([pattern])
@@ -117,16 +127,16 @@ model ThreatIntel {
 
 /**
  * DELEGATED EXECUTION: Scoped Session Keys.
- * Allows the Butler to work while the user is offline without full custody.
  */
 model SessionKey {
   id            String   @id @default(cuid())
   walletAddress String
   publicKey     String
-  encryptedKey  String   // Scoped key (iv:salt:tag:ciphertext)
-  permissions   Json     // { "burn": true, "recover": true, "maxGas": "0.01" }
+  encryptedKey  String   
+  permissions   Json     
   expiresAt     DateTime
   isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
   
   wallet        Wallet   @relation(fields: [walletAddress], references: [address])
   @@index([walletAddress, isActive])
@@ -134,15 +144,14 @@ model SessionKey {
 
 /**
  * EXECUTION AUDIT: Simulation Logs.
- * Records every pre-flight check for the "Net-Zero" rule.
  */
 model SimulationLog {
   id            String   @id @default(cuid())
   walletAddress String
   txHash        String?
   isSafe        Boolean
-  riskScore     Int      // 0-100
-  diff          Json?    // State changes detected
+  riskScore     Int      
+  diff          Json?    
   createdAt     DateTime @default(now())
 
   @@index([walletAddress])
@@ -150,22 +159,19 @@ model SimulationLog {
 
 /**
  * ENHANCED: Forensic Simulation Metadata.
- * Stores the "Rich Data" for developer dashboards and user audits.
  */
 model ForensicAudit {
   id                String   @id @default(cuid())
   walletAddress     String
-  targetAddress     String   // The contract/token being interacted with
+  targetAddress     String   
   
-  // High-Level Result
   isSafe            Boolean
-  riskScore         Int      // 0-100
-  verdict           String   // e.g., "BLOCK_HONEYPOT", "WARN_GAS_TRAP"
+  riskScore         Int      
+  verdict           String   
   
-  // Structured Forensic Data (The JSON Report)
-  simulationPayload Json     // Stores internalCalls, gasEstimates, stateDiffs
-  contractMetadata  Json     // Stores owner, factoryInfo, functionAnalysis
-  behaviorPatterns  Json     // Stores honeypotFlag, approvalTrap, etc.
+  simulationPayload Json     
+  contractMetadata  Json     
+  behaviorPatterns  Json     
   
   createdAt         DateTime @default(now())
   
@@ -174,17 +180,17 @@ model ForensicAudit {
 
 /**
  * NEW: Developer Usage Analytics.
- * Powers the "Developer Dashboard" with charts and heatmaps.
  */
 model ApiAnalytics {
   id            String   @id @default(cuid())
   apiKeyId      String
   endpoint      String
   statusCode    Int
-  responseTime  Int      // in milliseconds
+  responseTime  Int      
   riskDetected  Boolean  @default(false)
-  gasSaved      String?  // Total gas WIP saved the dev's user
+  gasSaved      String?  
   createdAt     DateTime @default(now())
 
+  apiKey        ApiKey   @relation(fields: [apiKeyId], references: [id])
   @@index([apiKeyId, createdAt])
 }

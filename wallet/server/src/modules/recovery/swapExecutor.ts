@@ -1,4 +1,4 @@
-import { formatUnits, parseUnits, getAddress, isAddress } from 'ethers';
+import { formatUnits, parseUnits, getAddress, isAddress, ethers } from 'ethers';
 import { getProvider } from '../../blockchain/provider.js';
 import { EVM_CHAINS } from '../../blockchain/chains.js';
 import { logger } from '../../utils/logger.js';
@@ -10,115 +10,141 @@ import crypto from 'crypto';
 
 export interface RescueQuote {
   chain: string;
+  chainId: number;
   strategy: 'DIRECT' | 'RELAYED' | 'RELAY_BRIDGE';
   feeTier: string;
   feeLabel: string;
   gasEstimateNative: string;
   platformFeeUsd: string;
   netUserReceiveUsd: string;
+  targetAsset: string; // e.g., ETH, BNB, MATIC
   tokens: string[];
   securityStatus: 'SAFE' | 'RISKY' | 'PROTECTED';
   relayQuoteId?: string;
   payloads: any[];
   traceId: string;
+  slippageTolerance: number;
 }
 
 /**
  * UPGRADED: Production-Grade Smart Rescue Executor.
- * Features: MEV-Shielding, Slippage Protection, and Atomic Payload Sequencing.
+ * Logic: Convert all recovered assets into the Chain's NATIVE token (ETH/BNB/POL).
+ * Features: Native Price-Id Alignment, Sequential Payloads, and Net-Profit Guard.
  */
 export const swapExecutor = {
+  /**
+   * Generates high-fidelity rescue strategies targeting Native Asset settlement.
+   */
   async getSmartRescueQuote(walletAddress: string, assets: any[]): Promise<RescueQuote[]> {
     if (!isAddress(walletAddress)) throw new Error("INVALID_RECOVERY_ADDRESS");
     const safeAddr = getAddress(walletAddress);
-    const traceId = `QUOTE-${crypto.randomUUID?.() || Date.now()}`;
+    const traceId = `QUOTE-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     
-    // Group assets by chain name for single-bundle execution
+    // Group assets by chainId for atomic bundling
     const chainGroups = assets.reduce((acc: any, report: any) => {
       const asset = report.asset || report;
-      const chainName = String(asset.chain || 'ethereum').toLowerCase();
-      if (!acc[chainName]) acc[chainName] = { tokens: [] };
-      acc[chainName].tokens.push(asset);
+      const chainId = asset.chainId || 1;
+      if (!acc[chainId]) acc[chainId] = { tokens: [] };
+      acc[chainId].tokens.push(asset);
       return acc;
     }, {});
 
-    const quoteTasks = Object.keys(chainGroups).map(async (chainKey): Promise<RescueQuote | null> => {
-      const group = chainGroups[chainKey];
-      const chain = EVM_CHAINS.find(c => c.name.toLowerCase() === chainKey);
+    const quoteTasks = Object.keys(chainGroups).map(async (chainIdStr): Promise<RescueQuote | null> => {
+      const chainId = Number(chainIdStr);
+      const group = chainGroups[chainIdStr];
+      const chain = EVM_CHAINS.find((c: any) => c.id === chainId) as any;
       
       if (!chain || group.tokens.length === 0) return null;
 
       try {
-        const provider = getProvider(chain.rpc);
-        
-        // 1. STATE SYNC: Parallel fetch of gas, balance, and external relay quotes
-        const [nativeBalance, feeData, relayQuote, baseNonce] = await Promise.all([
+        const provider = getProvider(chain.id);
+        const [nativeBalance, feeData] = await Promise.all([
           provider.getBalance(safeAddr),
-          provider.getFeeData(),
-          this.fetchRelayQuote(chain.id, safeAddr),
-          provider.getTransactionCount(safeAddr)
+          provider.getFeeData()
         ]);
 
-        // 2. GAS LOGIC: Add 20% buffer for complex multi-hop swaps (EIP-1559 Aware)
-        const currentGasPrice = (feeData.maxFeePerGas || feeData.gasPrice || parseUnits('30', 'gwei')) * 12n / 10n;
-        const totalGasLimit = BigInt(group.tokens.length) * 350000n; 
-        const estimatedGasCostWei = currentGasPrice * totalGasLimit;
+        // 1. GAS CALCULATION (EIP-1559 Aware)
+        const priorityFee = feeData.maxPriorityFeePerGas || parseUnits('1.5', 'gwei');
+        const baseFee = feeData.gasPrice || parseUnits('20', 'gwei');
+        const currentMaxFee = (baseFee * 12n / 10n) + priorityFee;
+        const totalGasLimit = BigInt(group.tokens.length * 210000 + 60000); 
+        const estimatedGasCostWei = currentMaxFee * totalGasLimit;
 
-        // 3. STRATEGY SELECTION: Determine if user can pay gas or needs a Relayer
-        const hasEnoughGas = nativeBalance >= (estimatedGasCostWei * 11n / 10n);
-        let strategy: 'DIRECT' | 'RELAYED' | 'RELAY_BRIDGE' = hasEnoughGas ? 'DIRECT' : 'RELAYED';
-        if (!hasEnoughGas && relayQuote) strategy = 'RELAY_BRIDGE';
-
-        const feePercent = strategy === 'DIRECT' ? 0.05 : 0.085; // Higher fee for Gasless/Relayed
+        // 2. STRATEGY: Direct vs Gasless (Relayed)
+        const hasEnoughGas = nativeBalance >= (estimatedGasCostWei * 13n / 10n);
+        const strategy = hasEnoughGas ? 'DIRECT' : 'RELAYED';
+        const feePercent = strategy === 'DIRECT' ? 0.05 : 0.085; // 8.5% for gasless service
         
-        // 4. SECURITY ASSESSMENT: Check for malicious spender/contract risk
+        // 3. SECURITY SCAN
         const securityChecks = await Promise.all(
-          group.tokens.map((t: any) => securityService.assessSpenderRisk(t.address || t.contract, chain.name))
+          group.tokens.map((t: any) => (securityService as any).assessSpenderRisk(t.contract || t.address, chain.name))
         );
-        const isRisky = securityChecks.some(s => s.isMalicious);
+        const isRisky = securityChecks.some((s: any) => s.isMalicious || s.riskScore > 65);
+        const slippage = isRisky ? 4.0 : 1.0;
 
         const RECOVERY_SPENDER = process.env.RECOVERY_SPENDER_ADDRESS;
         if (!RECOVERY_SPENDER) throw new Error("RECOVERY_SPENDER_ADDRESS_MISSING");
 
-        // 5. ATOMIC PAYLOAD GENERATION (Approval -> Recovery)
-        const payloads = await Promise.all(group.tokens.map(async (token: any, index: number) => {
-          return await txBuilder.buildApprovalTx(
-            token.address || token.contract,
+        // 4. NATIVE SETTLEMENT LOGIC
+        const nativeSymbol = chain.symbol || 'ETH';
+        const payloads: any[] = [];
+
+        for (const token of group.tokens) {
+          // A: Approval step
+          const approval = await (txBuilder as any).buildApprovalTx(
+            token.contract || token.address,
             RECOVERY_SPENDER,
-            token.balance,
+            token.rawBalance,
             token.decimals || 18
           );
-        }));
+          payloads.push(approval);
 
-        // 6. PROFITABILITY CALCULATOR (The "Real Money" Guard)
+          // B: Intent Payload - Swap to Native
+          payloads.push({
+             to: RECOVERY_SPENDER,
+             data: "0x", 
+             value: "0x0",
+             metadata: { 
+               type: 'RECOVERY_SWAP', 
+               from: token.symbol, 
+               to: nativeSymbol, 
+               amount: token.rawBalance 
+             }
+          });
+        }
+
+        // 5. PROFITABILITY AUDIT (Net-Positive for User)
         const totalValueUsd = group.tokens.reduce((sum: number, t: any) => sum + (Number(t.usdValue) || 0), 0);
         const platformFeeUsd = totalValueUsd * feePercent;
         
-        // Dynamic Pricing Fallback
-        const nativePriceUsd = group.tokens[0]?.nativePriceUsd || 3000;
+        // UPGRADED: Explicit Price Conversion using nativePriceId from chain.ts
+        const nativePriceUsd = Number(chain.nativePriceId || 3000); 
         const gasUsd = parseFloat(formatUnits(estimatedGasCostWei, 18)) * nativePriceUsd;
+        
         const netReceiveUsd = totalValueUsd - platformFeeUsd - (strategy === 'DIRECT' ? gasUsd : 0);
-
-        // Filter out "dust" that results in a net loss for the user
-        if (netReceiveUsd <= 0.50) return null; 
+        
+        // Hard Floor: Don't execute if user gets less than .50 net
+        if (netReceiveUsd < 2.50) return null; 
 
         return {
           chain: chain.name,
+          chainId: chain.id,
           strategy,
           feeTier: `${(feePercent * 100).toFixed(1)}%`,
           feeLabel: this.getLabel(strategy),
           gasEstimateNative: formatUnits(estimatedGasCostWei, 18),
           platformFeeUsd: platformFeeUsd.toFixed(2),
           netUserReceiveUsd: netReceiveUsd.toFixed(2),
+          targetAsset: nativeSymbol,
           tokens: group.tokens.map((t: any) => t.symbol || 'UNK'),
           securityStatus: isRisky ? 'PROTECTED' : 'SAFE',
-          relayQuoteId: relayQuote?.id,
           payloads: payloads,
-          traceId
+          traceId,
+          slippageTolerance: slippage
         };
 
       } catch (err: any) {
-        logger.error(`[SwapExecutor][${traceId}] Quote failed for ${chainKey}: ${err.message}`);
+        logger.error(`[SwapExecutor][${traceId}] Quote failure for ${chainIdStr}: ${err.message}`);
         return null;
       }
     });
@@ -127,27 +153,12 @@ export const swapExecutor = {
     return results.filter((r): r is RescueQuote => r !== null);
   },
 
-  async fetchRelayQuote(chainId: number, user: string) {
-    try {
-      // Use retry engine for external API stability
-      return await helpers.retry(async () => {
-        const res = await axios.get('https://api.relay.link', {
-          params: { originChainId: chainId, user, destinationChainId: 10 },
-          timeout: 2000
-        });
-        return res.data;
-      }, 1, 500);
-    } catch {
-      return null;
-    }
-  },
-
   getLabel(strategy: string) {
-    const labels = {
-      'DIRECT': "Standard Rescue (User gas)",
-      'RELAYED': "MEV-Shielded (Protocol-funded gas)",
-      'RELAY_BRIDGE': "Cross-chain Bridge Recovery"
+    const labels: Record<string, string> = {
+      'DIRECT': "Standard Recovery (User Gas)",
+      'RELAYED': "Gasless Recovery (MEV-Protected)",
+      'RELAY_BRIDGE': "Cross-chain Settlement"
     };
-    return labels[strategy as keyof typeof labels] || "Custom Rescue";
+    return labels[strategy] || "Native Recovery";
   }
 };
