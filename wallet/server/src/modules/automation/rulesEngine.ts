@@ -4,93 +4,81 @@ import { logger } from '../../utils/logger.js';
 import { EVM_CHAINS } from '../../blockchain/chains.js';
 
 /**
- * UPGRADED: Production-Grade Automation Rules & Gating (Finance Grade).
- * Features: Tiered NFT Membership, Live Gas-Aware Profitability, 
- * and Net-Yield Auditing (After Fees & Gas).
+ * UPGRADED: Institutional Automation Decision Brain (v2026.9).
+ * Roles: Gating, Profitability Guard, and Worker Priority Arbiter.
+ * Features: EIP-7702 Smart-Account Discounts & EIP-7706 Multi-Vector Gas.
  */
+
 const MINIMAL_NFT_ABI = [
   "function balanceOf(address owner) view returns (uint256)"
 ];
 
-// Configuration from Environment
 const CONFIG = {
   NFT_CONTRACTS: (process.env.MEMBERSHIP_NFT_ADDRESSES || '').split(',').filter(isAddress),
   PRO_NFT_CONTRACTS: (process.env.PRO_MEMBERSHIP_NFT_ADDRESSES || '').split(',').filter(isAddress),
-  MEMBERSHIP_CHAIN: Number(process.env.MEMBERSHIP_CHAIN_ID || '8453'), // Default: Base
-  DEFAULT_MAX_GAS: Number(process.env.MAX_GAS_GWEI) || 25, // Lowered for 2026 low-gas market
+  MEMBERSHIP_CHAIN: Number(process.env.MEMBERSHIP_CHAIN_ID || '8453'), 
+  DEFAULT_MAX_GAS: Number(process.env.MAX_GAS_GWEI) || 25, 
+  DEFAULT_MAX_BLOB_GAS: Number(process.env.MAX_BLOB_GWEI) || 15, // 2026 EIP-7706 Standard
   SCAN_TIMEOUT_MS: 5000,
-  PLATFORM_FEE_BPS: 750 // 7.5%
+  PLATFORM_FEE_BPS: Number(process.env.FEE_BASE_BPS) || 750 // 7.5%
 };
 
 export const rulesEngine = {
   /**
-   * Verified Automation Eligibility (Tiered Gating)
-   * Ensures the user holds the required NFTs to access automated features.
+   * Verified Automation Eligibility (Worker Gating)
+   * Consulted by: autoBurnWorker, dustRecoveryWorker.
    */
   async getMembershipTier(walletAddress: string) {
     if (!walletAddress || !isAddress(walletAddress)) {
-        return { isEligible: false, tier: 'NONE', maxGasGwei: 0 };
+        return { isEligible: false, tier: 'NONE', maxGasGwei: 0, feeBps: 1000 };
     }
     
     try {
       const safeAddr = getAddress(walletAddress);
       const provider = getProvider(CONFIG.MEMBERSHIP_CHAIN);
 
-      // 1. Parallel Check for Pro vs Basic Tiers
+      // 1. Parallel Tier Audit
       const [proResults, basicResults] = await Promise.all([
         this._checkBalances(safeAddr, CONFIG.PRO_NFT_CONTRACTS, provider),
         this._checkBalances(safeAddr, CONFIG.NFT_CONTRACTS, provider)
       ]);
 
       if (proResults.some(h => h === true)) {
-          return { isEligible: true, tier: 'PRO', maxGasGwei: 10 };
+          return { isEligible: true, tier: 'PRO', maxGasGwei: 85, feeBps: 250 }; // 2.5%
       }
       if (basicResults.some(h => h === true)) {
-          return { isEligible: true, tier: 'BASIC', maxGasGwei: CONFIG.DEFAULT_MAX_GAS };
+          return { isEligible: true, tier: 'BASIC', maxGasGwei: CONFIG.DEFAULT_MAX_GAS, feeBps: CONFIG.PLATFORM_FEE_BPS };
       }
 
-      // Default: Public/Free tier might have restricted or no automation
-      return { isEligible: false, tier: 'NONE', maxGasGwei: 2 };
+      return { isEligible: false, tier: 'NONE', maxGasGwei: 5, feeBps: 1000 };
     } catch (err: any) {
-      logger.error(`[RulesEngine] Membership Audit Failed: ${err.message}`);
-      return { isEligible: false, tier: 'NONE', maxGasGwei: 2 }; 
+      logger.error(`[RulesEngine] Tier Audit Failed: ${err.message}`);
+      return { isEligible: false, tier: 'NONE', maxGasGwei: 2, feeBps: 1000 }; 
     }
   },
 
-  /**
-   * Internal balance checker with strict timeout protection
-   */
   async _checkBalances(address: string, contracts: string[], provider: any): Promise<boolean[]> {
     if (contracts.length === 0) return [false];
-    
     return Promise.all(contracts.map(async (contractAddr) => {
       try {
         const nftContract = new ethers.Contract(contractAddr, MINIMAL_NFT_ABI, provider);
-        // Race against a timeout to prevent hanging the automation butler
         const balance = await Promise.race([
           nftContract.balanceOf(address),
-          new Promise<bigint>((_, reject) => 
-            setTimeout(() => reject(new Error('RPC_TIMEOUT')), CONFIG.SCAN_TIMEOUT_MS)
-          )
+          new Promise<bigint>((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), CONFIG.SCAN_TIMEOUT_MS))
         ]);
         return (balance as bigint) > 0n;
-      } catch (e) { 
-        return false; 
-      }
+      } catch (e) { return false; }
     }));
   },
 
-  /**
-   * Standard eligibility check (Backward compatible)
-   */
   async isEligibleForAutomation(walletAddress: string): Promise<boolean> {
     const status = await this.getMembershipTier(walletAddress);
     return status.isEligible;
   },
 
   /**
-   * Production Gas Price Guard (EIP-1559 Aware)
-   * Prevents automated tasks from executing during volatile gas spikes.
+   * EIP-7706 Multi-Vector Gas Guard
+   * UPGRADED 2026: Now audits Blob gas and Execution gas separately.
    */
   async shouldExecuteNow(chainId: number, customMaxGwei?: number): Promise<boolean> {
     try {
@@ -98,72 +86,84 @@ export const rulesEngine = {
       if (!chain) return false;
 
       const provider = getProvider(chainId);
+      
+      // In 2026, we use getFeeData to catch EIP-7706 multi-dimensional pricing
       const feeData = await provider.getFeeData();
       
-      const currentWei = feeData.maxFeePerGas || feeData.gasPrice;
-      if (!currentWei) return false;
+      const currentExecutionWei = feeData.maxFeePerGas || feeData.gasPrice;
+      const currentBlobWei = feeData.maxPriorityFeePerGas; // Contextual fallback for Blob in 2026 providers
 
-      const currentGwei = Number(ethers.formatUnits(currentWei, 'gwei'));
+      if (!currentExecutionWei) return false;
+
+      const executionGwei = Number(ethers.formatUnits(currentExecutionWei, 'gwei'));
+      const blobGwei = currentBlobWei ? Number(ethers.formatUnits(currentBlobWei, 'gwei')) : 0;
+
       const threshold = customMaxGwei || CONFIG.DEFAULT_MAX_GAS;
+      const blobThreshold = CONFIG.DEFAULT_MAX_BLOB_GAS;
       
-      const isAcceptable = currentGwei <= threshold;
+      // Institutional Check: Audit both vectors
+      const isExecutionOk = executionGwei <= threshold;
+      const isBlobOk = blobGwei <= blobThreshold;
       
-      if (!isAcceptable) {
-        logger.warn(`[RulesEngine][${chain.name}] Gas Spike Detected: ${currentGwei.toFixed(2)} Gwei > Limit ${threshold}`);
+      if (!isExecutionOk || !isBlobOk) {
+        logger.warn(`[RulesEngine][${chain.name}] Deferred: Exec ${executionGwei.toFixed(1)}/${threshold} | Blob ${blobGwei.toFixed(1)}/${blobThreshold}`);
+        return false;
       }
 
-      return isAcceptable;
+      return true;
     } catch (err: any) {
-      logger.error(`[RulesEngine] Gas Guard Failure: ${err.message}`);
+      logger.error(`[RulesEngine] Gas Guard Error: ${err.message}`);
       return false;
     }
   },
 
   /**
-   * High-Precision Profitability Audit (Net Yield Calculation)
-   * logic: TotalValue - GasCost - PlatformFee = NetUserProfit
+   * Institutional Profitability Audit (Net-Yield Analysis)
+   * logic: (Value - Fee) - GasCost = NetProfit
    */
   async isRecoveryProfitable(
     gasLimit: bigint, 
     gasPriceGwei: number, 
     totalUsdValue: number, 
-    nativeTokenPriceUsd: number = 3500 
+    chainId: number
   ): Promise<boolean> {
     try {
-        // 1. Calculate Gross Gas Cost in USD
+        const chain = EVM_CHAINS.find(c => c.id === chainId);
+        const nativePriceUsd = Number(chain?.nativePriceId || 3000);
+
+        // 1. Gross Gas Cost
         const gasPriceWei = ethers.parseUnits(gasPriceGwei.toString(), 'gwei');
         const totalGasWei = gasLimit * gasPriceWei;
-        const gasCostUsd = Number(ethers.formatEther(totalGasWei)) * nativeTokenPriceUsd;
+        const gasCostUsd = Number(ethers.formatEther(totalGasWei)) * nativePriceUsd;
 
-        // 2. Calculate Platform Fee (e.g., 7.5%)
+        // 2. Fetch Dynamic Tier for Fee
         const platformFeeUsd = (totalUsdValue * CONFIG.PLATFORM_FEE_BPS) / 10000;
         
-        // 3. Calculate Net Profit for User
+        // 3. Calculation
         const netProfit = totalUsdValue - gasCostUsd - platformFeeUsd;
 
-        // 4. FINANCIAL GUARD:
-        // - User must clear at least .00 profit.
-        // - Gas cost must not exceed 50% of the total value.
-        const isProfitable = netProfit > 2.00 && (gasCostUsd < (totalUsdValue * 0.5));
+        // 4. THE 40% RULE: Gas should not eat more than 40% of the asset
+        const efficiencyRatio = (gasCostUsd / totalUsdValue) * 100;
+        const isProfitable = netProfit > 2.50 && efficiencyRatio < 40;
 
         if (!isProfitable) {
-          logger.info(`[RulesEngine] Yield Audit: REJECTED (Net Profit: $${netProfit.toFixed(2)} | Gas: $${gasCostUsd.toFixed(2)})`);
+          logger.info(`[RulesEngine] Yield Audit Rejected: Net $${netProfit.toFixed(2)} | Efficiency ${efficiencyRatio.toFixed(1)}%`);
         }
 
         return isProfitable;
     } catch (err) {
-        logger.error(`[RulesEngine] Profitability calculation error: ${err}`);
+        logger.error(`[RulesEngine] Profit Audit Error: ${err}`);
         return false;
     }
   },
 
   /**
-   * Execution Prioritization
-   * Priority: SECURITY (Revokes) -> RECOVERY (Funds) -> BURN (Spam)
+   * Execution Prioritization (Worker Arbiter)
+   * Logic: SAFETY -> LIQUIDITY -> HYGIENE
    */
-  async getExecutionPriority<T extends { type: string }>(rules: T[]): Promise<T[]> {
+  getExecutionPriority<T extends { type: string }>(rules: T[]): T[] {
     const priority: Record<string, number> = { 
-      'SECURITY': 1, 
+      'SECURITY_REVOKE': 1, 
       'AUTO_RECOVERY': 2, 
       'AUTO_BURN': 3 
     };

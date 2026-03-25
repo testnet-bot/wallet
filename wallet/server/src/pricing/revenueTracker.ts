@@ -1,5 +1,5 @@
-import { prisma } from '../config/database.js';
-import { logger } from '../utils/logger.js';
+import { prisma } from './../config/database.js';
+import { logger } from './../utils/logger.js';
 import { z } from 'zod';
 import crypto from 'node:crypto';
 
@@ -11,22 +11,21 @@ export interface GasBreakdown {
   calldataUsd: number;
 }
 
-// Strict Financial Validation Schema
+// Strict Financial Validation Schema for Institutional Compliance
 const FeeSchema = z.object({
   wallet: z.string().regex(/^0x[a-fA-F0-9]{40}$/),
   amountUsd: z.number().nonnegative(),
-  chain: z.string().min(1),
-  type: z.string()
+  chain: z.string().min(1)
 });
 
 /**
- * UPGRADED: Institutional Treasury & Revenue Intelligence (v2026.10).
- * Features: Atomic Idempotency, EIP-7706 Gas Vectors, and Superchain Analytics.
+ * UPGRADED: Institutional Treasury Intelligence (v2026.11 Hardened).
+ * Features: Atomic Idempotency, EIP-7706 Multi-Vector Gas, and PnL Forensics.
  */
 export const revenueTracker = {
   /**
-   * Tracks fee extraction with 2026 Multi-Vector Gas awareness.
-   * Logic: Validates -> Calculates Net Margin -> Atomic Persistence.
+   * Tracks fee extraction with Multi-Vector Gas awareness.
+   * Logic: Validates -> Calculates Net PnL -> Atomic Upsert.
    */
   async trackFee(
     wallet: string, 
@@ -39,8 +38,8 @@ export const revenueTracker = {
     const traceId = `REV-${crypto.randomUUID().split('-')[0].toUpperCase()}`;
     
     try {
-      // 1. VALIDATION & NORMALIZATION
-      FeeSchema.parse({ wallet, amountUsd, chain, type });
+      // 1. VALIDATION
+      FeeSchema.parse({ wallet, amountUsd, chain });
       const safeAddr = wallet.toLowerCase();
       const safeChain = chain.toLowerCase();
       
@@ -48,11 +47,14 @@ export const revenueTracker = {
       const netProfit = amountUsd - totalGasUsd;
       const marginPercent = amountUsd > 0 ? (netProfit / amountUsd) * 100 : 0;
 
-      // 2. ATOMIC PERSISTENCE (Prisma 7+ Optimized)
-      // Uses txHash as an idempotency key to prevent double-counting fees
+      // 2. ATOMIC PERSISTENCE
+      // rawAmount stores Net Profit (PnL) for high-precision institutional audit.
       const entry = await prisma.payment.upsert({
         where: { txHash: txHash || `INT-${traceId}-${Date.now()}` },
-        update: { confirmed: true },
+        update: { 
+          confirmed: true,
+          status: 'SUCCESS'
+        },
         create: {
           traceId,
           wallet: safeAddr,
@@ -60,38 +62,21 @@ export const revenueTracker = {
           chain: safeChain,
           txHash: txHash || `INT-${traceId}-${Date.now()}`,
           confirmed: true,
-          type: type,
-          // 2026 Metadata: Detailed breakdown of the multi-vector gas spend
-          metadata: {
-            ...gasBreakdown,
-            totalGasUsd,
-            netProfit: netProfit.toFixed(6),
-            marginPercent: `${marginPercent.toFixed(2)}%`,
-            standard: 'EIP-7706_MULTI_VECTOR'
-          },
-          createdAt: new Date()
+          status: 'SUCCESS',
+          rawAmount: netProfit.toFixed(8), // PnL precision
+          updatedAt: new Date()
         }
       });
 
       // 3. INSTITUTIONAL ATTRIBUTION LOGGING
-      logger.info({
-        traceId,
-        wallet: safeAddr,
-        gross: `$${amountUsd.toFixed(2)}`,
-        net: `$${netProfit.toFixed(2)}`,
-        margin: `${marginPercent.toFixed(1)}%`,
-        chain: safeChain
-      }, `[Treasury][${type}] Fee Extraction Logged`);
+      logger.info(`[Treasury][${type}] Trace: ${traceId} | Wallet: ${safeAddr} | Gross: $${amountUsd.toFixed(2)} | Net: $${netProfit.toFixed(2)} | Margin: ${marginPercent.toFixed(1)}% | Chain: ${safeChain}`);
 
-      // 4. LOYALTY ENGINE SYNC
-      // Increments 'totalFeesPaid' to handle automatic membership upgrades
+      // 4. WALLET SYNC (Tiered Loyalty Update)
+      // Note: We use lastSynced to trigger re-scans in the rules engine
       await prisma.wallet.update({
         where: { address: safeAddr },
-        data: { 
-          lastSynced: new Date(),
-          totalFeesPaid: { increment: amountUsd }
-        }
-      }).catch((err) => logger.warn(`[Revenue][${traceId}] Wallet loyalty sync skipped: ${err.message}`));
+        data: { lastSynced: new Date() }
+      }).catch((err) => logger.warn(`[Revenue][${traceId}] Wallet metadata sync skipped: ${err.message}`));
 
       return { 
         ...entry, 
@@ -100,7 +85,7 @@ export const revenueTracker = {
         traceId
       };
     } catch (err: any) {
-      logger.error({ traceId, error: err.message }, `[Revenue] Critical Ledger Failure`);
+      logger.error(`[Revenue] Critical Ledger Failure: ${err.message}`);
       return null;
     }
   },
@@ -109,17 +94,12 @@ export const revenueTracker = {
    * ANALYTICS: Track non-executed quotes to measure "Value at Risk" (VaR).
    */
   async trackPotentialRevenue(traceId: string, data: { wallet: string, grossUsd: number, platformFeeUsd: number, strategy: string }) {
-    logger.debug({ 
-      traceId, 
-      wallet: data.wallet, 
-      potentialFee: `$${data.platformFeeUsd.toFixed(2)}`,
-      strategy: data.strategy 
-    }, "[Analytics] Potential Revenue Quote Cached");
+    logger.info(`[Analytics][${traceId}] Quote Generated | Wallet: ${data.wallet} | Potential Fee: $${data.platformFeeUsd.toFixed(2)} | Strategy: ${data.strategy}`);
   },
 
   /**
-   * ADVANCED ANALYTICS: March 2026 Financial Health Report.
-   * Optimized for parallel execution and sub-100ms reporting.
+   * ADVANCED ANALYTICS: Protocol Financial Health Report.
+   * Parallelized for sub-100ms reporting on large datasets.
    */
   async getFullProtocolStats() {
     try {
@@ -152,7 +132,7 @@ export const revenueTracker = {
         allTimeRevenue: totalRev,
         volume24h: Number(dailyVolume._sum.amount || 0),
         transactionCount: stats._count.id,
-        averageTicketSize: Number(stats._avg.amount || 0),
+        averageFee: Number(stats._avg.amount || 0),
         chainDominance: chainPerformance.map(c => ({
           chain: c.chain,
           revenue: Number(c._sum.amount || 0),
@@ -162,13 +142,13 @@ export const revenueTracker = {
         timestamp: new Date().toISOString()
       };
     } catch (err: any) {
-      logger.error(`[Revenue] Analytics Engine Error: ${err.message}`);
+      logger.error(`[Revenue] Analytics Engine Crash: ${err.message}`);
       return null;
     }
   },
 
   /**
-   * WHALE & RWA RADAR: Identifies top 1% protocol contributors.
+   * Identifies high-value protocol contributors.
    */
   async getTopContributors(limit: number = 20) {
     return await prisma.payment.groupBy({
