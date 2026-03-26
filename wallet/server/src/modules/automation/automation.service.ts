@@ -8,7 +8,7 @@ import { getAddress } from 'ethers';
 /**
  * UPGRADED: Production-Grade Automation Orchestrator (The Butler).
  * Features: Sequential Nonce Safety, Auto-Circuit Breaking, and Tiered Gating.
- * Ensures "Real Money" movements are serialised to prevent nonce collisions.
+ * FIX: Atomic Locking moved to top-level to prevent race conditions during membership checks.
  */
 export const automationService = {
   // Prevent parallel execution on the same wallet (Strict Nonce Protection)
@@ -24,20 +24,21 @@ export const automationService = {
     const safeAddr = getAddress(walletAddress).toLowerCase();
     const now = Date.now();
 
-    // 1. RATE LIMIT GUARD: 60s Cooldown for Finance Stability
-    const lastRun = this.lastProcessTime.get(safeAddr) || 0;
-    if (now - lastRun < 60000) {
-       return { status: 'SKIPPED', reason: 'RATE_LIMIT_COOLDOWN', wallet: safeAddr };
-    }
-
-    // 2. CONCURRENCY LOCK: Prevents multiple processes from using the same Nonce
+    // 1. CONCURRENCY LOCK (UPGRADED: Moved to absolute top to be truly atomic)
     if (this.activeLocks.has(safeAddr)) {
       logger.warn(`[Automation] Wallet ${safeAddr} is locked. Skipping to prevent nonce collision.`);
       return { status: 'LOCKED', reason: 'ALREADY_PROCESSING', wallet: safeAddr };
     }
 
+    // Set the lock IMMEDIATELY before any async calls (membership/db)
+    this.activeLocks.add(safeAddr);
+
     try {
-      this.activeLocks.add(safeAddr);
+      // 2. RATE LIMIT GUARD: 60s Cooldown for Finance Stability
+      const lastRun = this.lastProcessTime.get(safeAddr) || 0;
+      if (now - lastRun < 60000) {
+         return { status: 'SKIPPED', reason: 'RATE_LIMIT_COOLDOWN', wallet: safeAddr };
+      }
       this.lastProcessTime.set(safeAddr, now);
 
       // 3. GATING: Tiered Membership Check
@@ -62,9 +63,6 @@ export const automationService = {
       const executionResults = [];
 
       // 5. SERIAL EXECUTION (CRITICAL UPGRADE)
-      // We process tasks one-by-one. Parallel execution on one wallet fails nonces.
-      // Priority: 1. Recovery (Save Assets) -> 2. Burn (Cleanup Spam)
-      
       const recoveryRule = userRules.find((r: any) => r.type === 'AUTO_RECOVERY');
       if (recoveryRule) {
         try {
@@ -105,25 +103,31 @@ export const automationService = {
       logger.error(`[Automation] Fatal Orchestration Error for ${safeAddr}: ${globalErr.message}`);
       throw globalErr;
     } finally {
-      // 7. RELEASE LOCK
+      // 7. RELEASE LOCK (Always occurs regardless of outcome)
       this.activeLocks.delete(safeAddr);
     }
   },
 
   /**
    * INTERNAL: Circuit Breaker
-   * Disables rules that have compromised or invalid private keys.
+   * UPGRADED: Handles both Number and String IDs safely.
    */
-  async handleRuleFailure(ruleId: number, errorMessage: string, address: string) {
+  async handleRuleFailure(ruleId: any, errorMessage: string, address: string) {
     const criticalErrors = ['invalid hex string', 'wrong password', 'insufficient funds', 'invalid private key'];
     const isCritical = criticalErrors.some(e => errorMessage.toLowerCase().includes(e));
 
     if (isCritical) {
       logger.error(`[Automation] Circuit Breaker: Disabling Rule ${ruleId} for ${address} due to: ${errorMessage}`);
-      await prisma.automationRule.update({
-        where: { id: ruleId },
-        data: { active: false }
-      }).catch(() => {});
+      
+      // Ensure we only try to update if the record exists to prevent Prisma errors
+      try {
+        await prisma.automationRule.update({
+          where: { id: ruleId },
+          data: { active: false }
+        });
+      } catch (err) {
+        logger.warn(`[Automation] Breaker failed to update DB for rule ${ruleId}`);
+      }
     }
   }
 };

@@ -8,6 +8,7 @@ import crypto from 'crypto';
  * UPGRADED: Production-Grade Automation Controller (Custodian Grade).
  * Features: Zero-Leak Data Redaction, Key-to-Address Ownership Validation, 
  * Idempotency Guards, and Audit Trailing.
+ * INTEGRATION: Fully aligned with chainId and chain schema updates.
  */
 export const automationController = {
   /**
@@ -36,6 +37,7 @@ export const automationController = {
           id: true,
           walletAddress: true,
           chain: true,
+          chainId: true, 
           type: true,
           active: true,
           targetBalance: true,
@@ -59,23 +61,25 @@ export const automationController = {
   /**
    * ADD a new rule to the DB.
    * UPGRADED: Validates Key ownership and prevents duplicate active rule injection.
+   * COMPLIANCE: Handles both chain (String) and chainId (Int) for schema alignment.
    */
   async addRule(req: Request, res: Response) {
     const traceId = `ADD-RULE-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
     try {
-      const { address, chain, type, targetBalance, privateKey } = req.body;
+      const { address, chain, chainId, type, targetBalance, privateKey } = req.body;
 
       // 1. STRICT INPUT VALIDATION
-      if (!address || !chain || !type || !privateKey) {
-        return res.status(400).json({ success: false, error: 'All fields (address, chain, type, privateKey) are required.', traceId });
+      // UPGRADED: Now accepts chainId as a valid chain identifier
+      if (!address || (!chain && !chainId) || !type || !privateKey) {
+        return res.status(400).json({ success: false, error: 'Required fields (address, chain/chainId, type, privateKey) are missing.', traceId });
       }
 
       const safeAddress = getAddress(address);
-      const cleanChain = chain.toString().toUpperCase();
+      const cleanChain = (chain || chainId).toString().toUpperCase();
+      const safeChainId = chainId ? parseInt(chainId.toString()) : 1; 
       const ruleType = type.toString().toUpperCase();
 
       // 2. CRYPTOGRAPHIC OWNERSHIP VALIDATION
-      // Ensures the provided Private Key actually controls the provided Address.
       try {
         const validationWallet = new Wallet(privateKey.toString());
         if (getAddress(validationWallet.address) !== safeAddress) {
@@ -91,11 +95,10 @@ export const automationController = {
       }
 
       // 3. IDEMPOTENCY GUARD
-      // Prevents multiple active rules of the same type/chain (prevents race conditions)
       const existing = await prisma.automationRule.findFirst({
         where: { 
           walletAddress: safeAddress, 
-          chain: cleanChain, 
+          chainId: safeChainId, 
           type: ruleType, 
           active: true 
         }
@@ -104,7 +107,7 @@ export const automationController = {
       if (existing) {
         return res.status(409).json({ 
           success: false, 
-          error: `An active ${ruleType} rule already exists for ${cleanChain}.`, 
+          error: `An active ${ruleType} rule already exists for chain ${safeChainId}.`, 
           traceId 
         });
       }
@@ -113,6 +116,7 @@ export const automationController = {
       const rule = await prisma.automationRule.create({
         data: {
           chain: cleanChain,
+          chainId: safeChainId, // UPGRADED: Added required Int field
           type: ruleType,
           privateKey: privateKey.toString(), 
           active: true,
@@ -134,7 +138,7 @@ export const automationController = {
       res.status(500).json({ 
         success: false, 
         error: 'Critical error while registering automation rule.',
-        detail: error.message.includes('Foreign key constraint') ? 'Wallet not registered.' : undefined,
+        detail: error.message,
         traceId
       });
     }
@@ -150,15 +154,15 @@ export const automationController = {
       const id = Number(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: 'Valid Rule ID required.', traceId });
 
-      const { active, targetBalance, privateKey } = req.body;
+      const { active, targetBalance, privateKey, chainId } = req.body;
 
       // 1. RE-VALIDATE KEY IF PROVIDED
       let updateData: any = {};
       if (active !== undefined) updateData.active = !!active;
       if (targetBalance !== undefined) updateData.targetBalance = targetBalance.toString();
+      if (chainId !== undefined) updateData.chainId = parseInt(chainId.toString());
 
       if (privateKey) {
-        // Fetch existing rule to get the address for validation
         const existing = await prisma.automationRule.findUnique({ where: { id } });
         if (!existing) throw new Error('Rule not found');
 

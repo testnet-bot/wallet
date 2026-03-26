@@ -1,13 +1,21 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import pg from 'pg';
+import dotenv from 'dotenv';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
 import { logger } from '../utils/logger.js';
 import { encryptPrivateKey, clearSensitiveData } from '../utils/crypto.js';
 
 /**
  * 2026 ENTERPRISE GRADE: Resilient Finance Database Engine.
  * Features: R/W Splitting, Circuit Breakers, Auto-Vaulting, and Lifecycle Hooks.
- * UPGRADED: Added Transaction Retries, Query Timeouts, and Resolved Async Vaulting.
+ * UPGRADED: Added PrismaPg Adapter, Transaction Retries, and Resolved Async Vaulting.
  */
+
+// Force load .env from server root to ensure connection strings are available
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+dotenv.config({ path: resolve(__dirname, '../../.env') });
 
 const connectionString = process.env.DATABASE_URL;
 const readReplicaUrl = process.env.DATABASE_READ_URL || connectionString;
@@ -19,7 +27,6 @@ const pool = new pg.Pool({
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 10000, 
   maxUses: 7500, 
-  // Finance addition: TCP Keepalive to prevent silent drops
   keepAlive: true,
 });
 
@@ -41,8 +48,11 @@ export async function connectDB() {
   }
 }
 
-// 2. BASE PRISMA CLIENT with Telemetry
+// 2. BASE PRISMA CLIENT with Adapter and Telemetry
+// UPGRADED: Added 'adapter' to constructor to fix PrismaClientConstructorValidationError
+const adapter = new PrismaPg(pool);
 const basePrisma = new PrismaClient({
+  adapter,
   log: [
     { emit: 'event', level: 'query' },
     { emit: 'stdout', level: 'error' },
@@ -62,25 +72,19 @@ if (process.env.NODE_ENV === 'development') {
  * Handles Encryption, Read/Write Splitting, and Retries.
  */
 export const prisma = basePrisma.$extends({
-  // DYNAMIC READ REPLICA ROUTING & RETRY LOGIC
   query: {
     async $allOperations({ model, operation, args, query }) {
       const isRead = ['findUnique', 'findFirst', 'findMany', 'count', 'aggregate', 'groupBy'].includes(operation);
       
-      // FINTECH UPGRADE: Automatic Retry Logic for Transient Failures (Deadlocks/Network)
       let attempts = 0;
       const maxRetries = 3;
 
       while (attempts < maxRetries) {
         try {
-          // Logic for replica switching (can be expanded with multiple client instances)
-          if (isRead && process.env.DATABASE_READ_URL) {
-             // In a real multi-db setup, you'd route to a separate client instance here
-          }
+          // Future: Logic for replica switching can be added here
           return await query(args);
         } catch (error: any) {
           attempts++;
-          // Retry on P2024 (Timeout) or P2034 (Transaction Deadlock)
           if (['P2024', 'P2034'].includes(error.code) && attempts < maxRetries) {
             logger.warn(`[Database] Retrying ${operation} on ${model}. Attempt: ${attempts}`);
             continue;
@@ -90,12 +94,10 @@ export const prisma = basePrisma.$extends({
       }
     },
 
-    // SECURITY: Automatic Encryption for Automation Rules (Private Keys)
     automationRule: {
       async create({ args, query }) {
         if (args.data.privateKey) {
           const raw = args.data.privateKey as string;
-          // FIX: Awaited to resolve Promise<string> to string
           args.data.privateKey = await encryptPrivateKey(raw);
           clearSensitiveData(raw); 
         }
@@ -104,7 +106,6 @@ export const prisma = basePrisma.$extends({
       async update({ args, query }) {
         if (args.data.privateKey && typeof args.data.privateKey === 'string') {
           const raw = args.data.privateKey;
-          // FIX: Awaited to resolve Promise<string> to string
           args.data.privateKey = await encryptPrivateKey(raw);
           clearSensitiveData(raw);
         }
@@ -113,20 +114,17 @@ export const prisma = basePrisma.$extends({
       async upsert({ args, query }) {
         if (args.create.privateKey) {
           const raw = args.create.privateKey as string;
-          // FIX: Awaited to resolve Promise<string> to string
           args.create.privateKey = await encryptPrivateKey(raw);
           clearSensitiveData(raw);
         }
         if (args.update.privateKey && typeof args.update.privateKey === 'string') {
           const raw = args.update.privateKey;
-          // FIX: Awaited to resolve Promise<string> to string
           args.update.privateKey = await encryptPrivateKey(raw);
           clearSensitiveData(raw);
         }
         return query(args);
       }
     },
-    // PERFORMANCE: Automatic "Last Active" Timestamping
     apiKey: {
       async update({ args, query }) {
         args.data.updatedAt = new Date();
@@ -134,7 +132,6 @@ export const prisma = basePrisma.$extends({
       }
     }
   },
-  // 4. COMPUTED FIELDS (Client-Side Intelligence)
   result: {
     payment: {
       isHighValue: {
@@ -143,7 +140,6 @@ export const prisma = basePrisma.$extends({
           return payment.amount > 100.0;
         },
       },
-      // Real-world addition: Precision-safe strings for big numbers
       formattedAmount: {
         needs: { amount: true },
         compute(p) { return `$${p.amount.toFixed(2)}`; }
@@ -154,7 +150,6 @@ export const prisma = basePrisma.$extends({
 
 /**
  * 5. GRACEFUL SHUTDOWN
- * Critical for finance to ensure no dangling transactions during a crash/restart.
  */
 process.on('SIGINT', async () => {
   logger.info('[Database] Closing Pool...');

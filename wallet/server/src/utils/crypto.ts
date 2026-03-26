@@ -1,5 +1,15 @@
 import crypto from 'crypto';
 import { Buffer } from 'buffer';
+import dotenv from 'dotenv';
+import { resolve } from 'path';
+import { fileURLToPath } from 'url';
+
+/**
+ * ⚡ UPGRADE: Strict Environment Loader
+ * Ensures .env is loaded before MASTER_SECRET is evaluated in ESM.
+ */
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+dotenv.config({ path: resolve(__dirname, '../../.env') });
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; 
@@ -13,7 +23,8 @@ const DIGEST = 'sha512';
  * Features: Non-blocking Async KDF, HKDF Key Expansion, and Memory-Safe Buffer Wiping.
  */
 
-const MASTER_SECRET = process.env.ENCRYPTION_MASTER_SECRET || '';
+// UPGRADE: Support both common naming conventions
+const MASTER_SECRET = process.env.ENCRYPTION_KEY || process.env.ENCRYPTION_MASTER_SECRET || '';
 const CURRENT_VERSION = 'v2.1'; 
 
 /**

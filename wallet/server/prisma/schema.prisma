@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -28,6 +29,7 @@ model AutomationRule {
   walletAddress String
   privateKey    String   
   chain         String
+  chainId       Int
   type          String   
   active        Boolean  @default(true)
   targetBalance String?
@@ -66,7 +68,8 @@ model Payment {
   clientReference String?  @unique // For Idempotency
   wallet          String
   txHash          String?  @unique
-  amount          Float    
+  amount          Float
+  currency        String   @default("USD")
   rawAmount       String?  
   token           String   @default("ETH")
   chain           String
