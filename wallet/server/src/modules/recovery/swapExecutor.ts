@@ -235,9 +235,13 @@ export const swapExecutor = {
     }
 
     try {
-      const simulation = await (txBuilder as any).simulatePayloads?.(quote.payloads, quote.chainId);
-      if (simulation && !simulation.success) throw new Error(`PRE_FLIGHT_SIMULATION_FAILED: ${simulation.error || 'Reverted'}`);
-      return await (txBuilder as any).broadcastStandard(encryptedPk, quote.payloads, quote.chainId);
+      const provider = getProvider(rpcUrl, quote.chainId);
+      const bundle = await txBuilder.formatBundle(provider, quote.payloads, 0, quote.chainId);
+
+    const signer = helpers.decryptSigner(encryptedPk, provider);
+    for (const tx of bundle) {
+      await signer.sendTransaction(tx);
+      }
     } catch (err: any) {
       logger.error(`[SwapExecutor][FATAL_EXECUTION] ${err.message}`);
       throw err;
