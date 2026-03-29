@@ -121,6 +121,9 @@ export const validator = {
    * Forces Checksumming to prevent database fragmentation and EIP-55 collisions.
    */
   validateRequestBody(req: Request, res: Response, next: NextFunction) {
+
+    const traceId = `VAL-${Date.now().toString(36).toUpperCase()}`;
+
     // 1. Extract Address from standard 2026 field names
   const rawAddress = (
     req.body?.address || 
@@ -132,7 +135,8 @@ export const validator = {
     if (!rawAddress || !isAddress(rawAddress)) {
       return res.status(422).json({ 
         success: false, 
-        error: 'A valid EVM (0x...) wallet address is required for security audit.' 
+        error: 'A valid EVM (0x...) wallet address is required for security audit.',
+        traceId
       });
     }
 
@@ -141,6 +145,7 @@ export const validator = {
       // Essential for cross-referencing with indexing services like Alchemy/Base.
       const checksummed = getAddress(rawAddress);
       req.body = req.body || {};  
+      req.query = req.query || {};
       // Inject back into the request pipeline to ensure all services use the same format
       if (req.body) req.body.address = checksummed;
       if (req.body.walletAddress) req.body.walletAddress = checksummed;
