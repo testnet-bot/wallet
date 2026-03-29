@@ -70,7 +70,7 @@ export const swapExecutor = {
         const chain = requireChain(chainId) as ChainConfig;  
         if (!group.tokens || group.tokens.length === 0) return null;  
 
-        const bestRpc = await this.withTimeout(getBestRpc(chainId), 4000, `RPC_DISCOVERY_${chainId}`)
+        const bestRpc = await this.withTimeout(getBestRpc(chainId), chainId === 1 ? 8000 : 4000, `RPC_DISCOVERY_${chainId}`)
           .catch(() => Array.isArray(chain.rpcs) ? chain.rpcs[0] : '');  
         if (!bestRpc) throw new Error(`NO_RPC_AVAILABLE_FOR_CHAIN_${chainId}`);  
 
@@ -85,7 +85,7 @@ export const swapExecutor = {
               const p = getProvider(rpc, chainId);
               const [balance, fees] = await this.withTimeout(
                 Promise.all([p.getBalance(safeAddr), p.getFeeData()]),
-                5000,
+                chainId === 1 ? 8000 : 4000,
                 `RPC_RACE_${chainId}`
               );
               if (!balance || !fees) throw new Error('INVALID_RPC_RESPONSE');
