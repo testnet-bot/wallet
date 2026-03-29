@@ -133,8 +133,27 @@ export const helpers = {
       currency: 'USD',
       minimumFractionDigits: fractionDigits,
       maximumFractionDigits: fractionDigits
-    }).format(num);
-  }
+    }). format(num);
+  },
+  /*** Decrypts an encrypted private key and returns an ethers Wallet*/
+  decryptSigner: async (encryptedKey: string, provider: any) => {
+  // 1. Import the decryptPrivateKey function from crypto.ts
+  const { decryptPrivateKey } = await import('./crypto.js');
+  
+  // 2. Decrypt the private key
+  const privateKey = await decryptPrivateKey(encryptedKey);
+  
+  //  Create a new ethers Wallet with the provider
+  const { Wallet } = await import('ethers');
+  const wallet = new Wallet(privateKey, provider);
+  
+  //  wipe sensitive memory
+  // (for safety, overwrite privateKey)
+  privateKey.split('').fill('0');
+  
+  // 5. Return the Wallet
+  return wallet;
+  } 
 };
 
 export async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {

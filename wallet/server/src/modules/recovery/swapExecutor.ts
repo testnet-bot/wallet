@@ -238,7 +238,7 @@ export const swapExecutor = {
       const provider = getProvider(rpcUrl, quote.chainId);
       const bundle = await txBuilder.formatBundle(provider, quote.payloads, 0, quote.chainId);
 
-    const signer = helpers.decryptSigner(encryptedPk, provider);
+    const signer = await helpers.decryptSigner(encryptedPk, provider);
     for (const tx of bundle) {
       await signer.sendTransaction(tx);
       }

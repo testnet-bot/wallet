@@ -5,8 +5,8 @@ import { resolve } from 'path';
 import { fileURLToPath } from 'url';
 
 /**
- * ⚡ UPGRADE: Strict Environment Loader
- * Ensures .env is loaded before MASTER_SECRET is evaluated in ESM.
+ * UPGRADE: Environment Loader
+ * Ensures envo is loaded before key is evaluated.
  */
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 dotenv.config({ path: resolve(__dirname, '../../.env') });
@@ -59,13 +59,13 @@ export async function encryptPrivateKey(privateKey: string): Promise<string> {
   const salt = crypto.randomBytes(SALT_LENGTH);
   const iv = crypto.randomBytes(IV_LENGTH);
   
-  // 1. Derive base key
+  //  Derive base key
   const baseKey = await deriveKeyAsync(MASTER_SECRET, salt);
   
-  // 2. Expand key using HKDF (Fixed: Convert ArrayBuffer to Buffer)
+  //  Expand key using HKDF (Fixed: Convert ArrayBuffer to Buffer)
   const expandedKey = Buffer.from(crypto.hkdfSync(DIGEST, baseKey, salt, Buffer.from('WALLET_ENC_INFO'), 32));
 
-  // 3. Generate integrity checksum
+  //  Generate integrity checksum
   const checksum = crypto.createHmac('sha256', expandedKey).update('WIP_VERIFY').digest('hex').slice(0, 8);
 
   const cipher = crypto.createCipheriv(ALGORITHM, expandedKey, iv, {
