@@ -4,10 +4,12 @@ import { logger } from '../utils/logger.js';
 /**
  * UPGRADED: Institutional-Grade Transaction Architect (v2026.5 Hardened).
  * Features: Fixed-point precision math, Strict Hex-normalization, 
- * EIP-7702 Smart-EOA Encoding, and Nonce-aware Atomic Bundle Sequencing.
+ * EIP-7702 Smart-EOA Encoding, Nonce-aware Atomic Bundle Sequencing,
+ * and EIP-1559 Dynamic Fee Scaling.
  */
 export const txBuilder = {
   BURN_ADDRESS: '0x000000000000000000000000000000000000dEaD',
+  MULTICALL_ADDRESS: '0xcA11bde05977b3631167028862bE2a173976CA11',
   BASE_PRECISION: BigInt(1e18),
 
   /**
@@ -125,11 +127,10 @@ export const txBuilder = {
    */
   async buildDelegationTx(proxyAddress: string) {
     try {
-      // 0xef01 is the EIP-7702 prefix for delegation designators
       const delegationData = `0xef01${getAddress(proxyAddress).toLowerCase().slice(2)}`;
       
       return {
-        to: null, // Self-delegation target
+        to: getAddress(proxyAddress), 
         data: delegationData,
         value: "0x0",
         gasLimit: ethers.toQuantity(100000n),
@@ -146,16 +147,13 @@ export const txBuilder = {
 
   /**
    * Dynamic Fee Deduction Builder.
-   * UPGRADED: Fixed-point math to prevent precision loss during high-volatility pricing.
+   * UPGRADED: Fixed-point math to prevent precision loss.
    */
   async buildFeeTx(recipient: string, amountUsd: number, tokenPrice: number, tokenAddress: string, decimals: number = 18) {
     try {
-      // Logic: (USD_AMT * 10^18) / PRICE_USD = TOKEN_AMT (in wei-precision)
       const usdInBigInt = BigInt(Math.floor(amountUsd * 1e6)); 
       const priceInBigInt = BigInt(Math.floor(tokenPrice * 1e6));
-      
       const rawValue = (usdInBigInt * ethers.parseUnits('1', decimals)) / priceInBigInt;
-      
       const iface = new ethers.Interface(["function transfer(address to, uint256 value)"]);
       const data = iface.encodeFunctionData("transfer", [getAddress(recipient), rawValue]);
 
@@ -178,19 +176,46 @@ export const txBuilder = {
   },
 
   /**
-   * ATOMIC SEQUENCE: Formats multiple TXs into a Flashbots-ready bundle.
-   * Logic: Sorts by priority (Revokes first), normalizes hex, and injects nonce offsets.
+   * NEW: Builds a Swap Transaction (Universal Router Pattern).
+   * Essential for SwapExecutor integration.
    */
-  formatBundle(transactions: any[], startNonce: number = 0) {
+  async buildSwapTx(routerAddress: string, callData: string, valueWei: string = "0") {
+    return {
+      to: getAddress(routerAddress),
+      data: callData,
+      value: ethers.toQuantity(BigInt(valueWei)),
+      gasLimit: ethers.toQuantity(350000n),
+      metadata: { type: 'SWAP', router: routerAddress }
+    };
+  },
+
+  /**
+   * NEW: Fetches scaled EIP-1559 fees with congestion buffer.
+   */
+  async getSmartFees(provider: ethers.Provider) {
+    const feeData = await provider.getFeeData();
+    const buffer = 125n; // 25% buffer for mainnet reliability
+    return {
+      maxFeePerGas: feeData.maxFeePerGas ? (feeData.maxFeePerGas * buffer) / 100n : undefined,
+      maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ? (feeData.maxPriorityFeePerGas * buffer) / 100n : undefined,
+    };
+  },
+
+  /**
+   * ATOMIC SEQUENCE: Formats multiple TXs into a Flashbots-ready bundle.
+   * UPGRADED: Injects dynamic EIP-1559 fees and strict chain validation.
+   */
+  async formatBundle(provider: any, transactions: any[], startNonce: number = 0, chainId?: number) {
+    const fees = await this.getSmartFees(provider);
     const priorityMap: Record<string, number> = { 
       'REVOKE': 1, 
       'SECURITY_ALERT': 1,
       'EIP7702_DELEGATION': 1,
       'APPROVAL': 2, 
-      'BURN': 3, 
-      'RECOVERY': 3,
-      'NATIVE_TRANSFER': 4,
-      'PROTOCOL_FEE': 5 
+      'SWAP': 3,
+      'BURN': 4, 
+      'NATIVE_TRANSFER': 5,
+      'PROTOCOL_FEE': 6 
     };
 
     const sorted = [...transactions].sort((a, b) => {
@@ -200,14 +225,13 @@ export const txBuilder = {
     });
 
     return sorted.map((tx, index) => {
-      // Strict BigInt-to-Hex normalization for Ethers v6/v7 compliance
       const normalizedValue = tx.value && (typeof tx.value === 'bigint' || !tx.value.toString().startsWith('0x'))
         ? ethers.toQuantity(BigInt(tx.value))
         : (tx.value || "0x0");
 
       const normalizedGas = tx.gasLimit && (typeof tx.gasLimit === 'bigint' || !tx.gasLimit.toString().startsWith('0x'))
         ? ethers.toQuantity(BigInt(tx.gasLimit))
-        : (tx.gasLimit || ethers.toQuantity(200000n));
+        : (tx.gasLimit || ethers.toQuantity(280000n));
 
       return {
         ...tx,
@@ -215,7 +239,10 @@ export const txBuilder = {
         value: normalizedValue,
         gasLimit: normalizedGas,
         nonce: startNonce + index,
-        chainId: tx.chainId ? BigInt(tx.chainId) : undefined
+        chainId: chainId ? BigInt(chainId) : undefined,
+        maxFeePerGas: fees.maxFeePerGas ? ethers.toQuantity(fees.maxFeePerGas) : undefined,
+        maxPriorityFeePerGas: fees.maxPriorityFeePerGas ? ethers.toQuantity(fees.maxPriorityFeePerGas) : undefined,
+        type: 2 // EIP-1559
       };
     });
   }
