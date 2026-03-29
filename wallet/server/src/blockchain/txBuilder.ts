@@ -1,6 +1,14 @@
 import { ethers, getAddress } from 'ethers';
 import { logger } from '../utils/logger.js';
 
+// NEW HELPER: Normalize values to hex string
+const normalizeHex = (value: bigint | string | undefined) => {
+if (!value) return "0x0";
+if (typeof value === "bigint") return ethers.toQuantity(value);
+if (typeof value === "string") return value.startsWith("0x") ? value : ethers.toQuantity(BigInt(value));
+return "0x0";
+};
+
 /**
  * UPGRADED: Institutional-Grade Transaction Architect (v2026.5 Hardened).
  * Features: Fixed-point precision math, Strict Hex-normalization, 
@@ -37,7 +45,12 @@ export const txBuilder = {
         canBundle: true
       };
     } catch (err: any) {
-      logger.error(`[TxBuilder] Failed to encode burn for ${tokenAddress}: ${err.message}`);
+    logger.error(`[TxBuilder] Failed to encode burn for ${tokenAddress}: ${err.message}`, {
+      tokenAddress,
+      amount,
+     decimals,
+     stack: err.stack
+       });
       throw err;
     }
   },
@@ -153,6 +166,7 @@ export const txBuilder = {
     try {
       const usdInBigInt = BigInt(Math.floor(amountUsd * 1e6)); 
       const priceInBigInt = BigInt(Math.floor(tokenPrice * 1e6));
+      if (priceInBigInt === 0n) throw new Error("Token price cannot be zero for fee calculation");
       const rawValue = (usdInBigInt * ethers.parseUnits('1', decimals)) / priceInBigInt;
       const iface = new ethers.Interface(["function transfer(address to, uint256 value)"]);
       const data = iface.encodeFunctionData("transfer", [getAddress(recipient), rawValue]);
@@ -194,7 +208,7 @@ export const txBuilder = {
    */
   async getSmartFees(provider: ethers.Provider) {
     const feeData = await provider.getFeeData();
-    const buffer = 125n; // 25% buffer for mainnet reliability
+    const buffer = BigInt(process.env.FEE_BUFFER || 125); 
     return {
       maxFeePerGas: feeData.maxFeePerGas ? (feeData.maxFeePerGas * buffer) / 100n : undefined,
       maxPriorityFeePerGas: feeData.maxPriorityFeePerGas ? (feeData.maxPriorityFeePerGas * buffer) / 100n : undefined,
@@ -225,24 +239,21 @@ export const txBuilder = {
     });
 
     return sorted.map((tx, index) => {
-      const normalizedValue = tx.value && (typeof tx.value === 'bigint' || !tx.value.toString().startsWith('0x'))
-        ? ethers.toQuantity(BigInt(tx.value))
-        : (tx.value || "0x0");
+     const normalizedValue = normalizeHex(tx.value);
+     const normalizedGas = normalizeHex(tx.gasLimit || 280000n);
 
-      const normalizedGas = tx.gasLimit && (typeof tx.gasLimit === 'bigint' || !tx.gasLimit.toString().startsWith('0x'))
-        ? ethers.toQuantity(BigInt(tx.gasLimit))
-        : (tx.gasLimit || ethers.toQuantity(280000n));
+if (!tx.to) throw new Error(`Missing 'to' address for transaction: ${tx.metadata?.type || 'UNKNOWN'}`);
 
       return {
         ...tx,
-        to: tx.to ? getAddress(tx.to) : null,
+        to: getAddress(tx.to), 
         value: normalizedValue,
         gasLimit: normalizedGas,
         nonce: startNonce + index,
         chainId: chainId ? BigInt(chainId) : undefined,
         maxFeePerGas: fees.maxFeePerGas ? ethers.toQuantity(fees.maxFeePerGas) : undefined,
         maxPriorityFeePerGas: fees.maxPriorityFeePerGas ? ethers.toQuantity(fees.maxPriorityFeePerGas) : undefined,
-        type: 2 // EIP-1559
+        type: 2 
       };
     });
   }
