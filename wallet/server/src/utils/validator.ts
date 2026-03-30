@@ -137,13 +137,21 @@ export const validator = {
     req.headers['address'] 
          ) as string;
  
+  // UPGRADE: Improved Query String Fallback for high-concurrency GET requests
+  if (!rawAddress && req.url && req.url.includes('address=')) {
+    const urlParts = req.url.split('address=');
+    if (urlParts[1]) rawAddress = urlParts[1].split('&')[0];
+  }
+
   if (!rawAddress && req.originalUrl && req.originalUrl.includes('?')) {
     const queryString = req.originalUrl.split('?')[1];
     const urlParams = new URLSearchParams(queryString);
     rawAddress = urlParams.get('address') as string;
     }
     
-    // UPGRADE: Corrected error message string from Dx to 0x for EVM compliance
+    // UPGRADE: Strict EVM message and fallback to (req as any) for nested router safety
+    rawAddress = rawAddress || (req as any).address;
+
     if (!rawAddress || !isAddress(rawAddress)) {
       return res.status(422).json({ 
         success: false, 
@@ -154,7 +162,6 @@ export const validator = {
 
     try {
       // 2. NORMALIZATION: Convert to EIP-55 Checksummed format
-      // Essential for cross-referencing with indexing services like Alchemy/Base.
       const checksummed = getAddress(rawAddress);
       req.body = req.body || {};  
       req.query = req.query || {};
