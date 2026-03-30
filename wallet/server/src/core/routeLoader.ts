@@ -53,16 +53,19 @@ export async function loadRoutes(app: Express) {
     
     try {
       // 1. ESM Cross-Platform Import
-      const moduleUrl = pathToFileURL(filePath).href;
+      const moduleUrl = `${pathToFileURL(filePath).href}?update=${Date.now()}`;
       const mod: RouteModule = await import(moduleUrl);
 
-      if (!mod.routeConfig) {
+      if (!mod || !mod.routeConfig) {
         logger.warn(`[RouteLoader] Skipping ${fileName}: No valid routeConfig exported.`);
         continue;
       }
 
       const { path: subPath, router, isPublic, isCritical } = mod.routeConfig;
-      const apiPath = `/api${subPath}`;
+      
+      // 2026 UPGRADE: Path Normalization to prevent // slash collisions in high-traffic routing
+      const normalizedSubPath = subPath.startsWith('/') ? subPath : `/${subPath}`;
+      const apiPath = `/api${normalizedSubPath}`.replace(/\/+/g, '/');
 
       // 2. SECURITY GUARDIAN (Middleware Injection)
       // Every non-public route is automatically shielded by the API Key Validator
@@ -70,10 +73,10 @@ export async function loadRoutes(app: Express) {
         app.use(apiPath, router);
       } else {
         // Enforce Authentication and Rate Limiting for high-value endpoints
-    app.use(apiPath, validator.apiKeyAuth, router);
+        app.use(apiPath, validator.apiKeyAuth, router);
       }
 
-      logger.info(`[RouteLoader] Mounted: ${apiPath} [${isPublic ? 'PUBLIC' : 'PROTECTED'}]`);
+      logger.info(`[RouteLoader] Mounted: ${apiPath} [${isPublic ? 'PUBLIC' : 'PROTECTED'}] [Critical: ${!!isCritical}]`);
 
     } catch (err: any) {
       const isCritical = filePath.includes('recovery') || filePath.includes('security');

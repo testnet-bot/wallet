@@ -39,7 +39,7 @@ import { startHealthWorker } from './workers/walletHealthWorker.js';
     
     // Limit JSON size to prevent "Body Bloat" attacks on the recovery engine
     app.use(express.json({ limit: '1mb' })); 
-  app.use(express.urlencoded({ extended: true, limit: '1mb' }));  
+    app.use(express.urlencoded({ extended: true, limit: '1mb' }));  
     app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
     // 3. HEARTBEATS & OBSERVERS (The "Live" Engine)
@@ -82,6 +82,14 @@ import { startHealthWorker } from './workers/walletHealthWorker.js';
     const server = app.listen(env.port, () => {
       logger.info(`[System] WIP Backend Live on Port ${env.port}`);
       logger.info(`[System] MEV-Shielding Active | Production Mode: ${process.env.NODE_ENV}`);
+      
+      // 2026 DIAGNOSTIC: Log all registered routes to verify 'v1/security/scan' mapping
+      if (process.env.NODE_ENV !== 'production') {
+          const registeredPaths = app._router.stack
+            .filter((r: any) => r.route)
+            .map((r: any) => `${Object.keys(r.route.methods)[0].toUpperCase()} ${r.route.path}`);
+          logger.info(`[Debug] Active Endpoints: ${JSON.stringify(registeredPaths)}`);
+      }
     });
 
     // Handle "Real Money" Safety: Clean up connections when the server stops

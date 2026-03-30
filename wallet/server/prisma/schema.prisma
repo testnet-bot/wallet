@@ -9,7 +9,7 @@ datasource db {
 
 model Wallet {
   address      String            @id
-  balance      String
+  balance      String            // Stored as Wei (String) to prevent overflow
   healthScore  Int               @default(100)
   riskLevel    String            @default("LOW")
   lastSynced   DateTime          @default(now())
@@ -22,6 +22,8 @@ model Wallet {
   
   rules        AutomationRule[]
   sessionKeys  SessionKey[]
+
+  @@index([riskLevel]) // Added: High-speed filtering for compromised wallets
 }
 
 model AutomationRule {
@@ -53,14 +55,14 @@ model ApiKey {
   metadata     Json?            // Stores capabilities and provisioning logs
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
-  lastUsedAt   DateTime? // <-- Add this
+  lastUsedAt   DateTime?        // Correctly tracked in validator.ts
   lastActive   DateTime         @default(now())
   usage        Int              @default(0)
   subscription ApiSubscription?
   analytics    ApiAnalytics[]
 
   @@index([wallet])
-  @@index([key])
+  @@index([key, status]) // Optimized: Composite index for auth speed
 }
 
 model Payment {
@@ -157,7 +159,7 @@ model SimulationLog {
   gasReport     Json?    // { execution: string, blob: string, calldata: string }
   createdAt     DateTime @default(now())
 
-  @@index([walletAddress])
+  @@index([walletAddress, createdAt]) // Added: Ordered index for historical UI
 }
 
 model ForensicAudit {
