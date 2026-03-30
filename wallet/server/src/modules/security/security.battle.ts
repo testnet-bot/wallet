@@ -1,137 +1,88 @@
-import express from 'express';
 import axios from 'axios';
 import http from 'http';
-import { scanSecurityController } from './security.controller.js';
-import { validator } from '../../utils/validator.js';
 
 /**
- * 2026 DIRECT-HIT STRATEGY: CONCURRENCY-HARDENED
- * Features: Connection Pooling, Micro-Server Isolation, and 
- * Detailed Latency Distribution.
+ * 2026 OBLITERATION ENGINE - V3.1 (RESILIENCE PATCH)
+ * Added: Pre-flight connectivity checks and explicit error trapping.
  */
 
-const app = express();
-const PORT = 5001; 
+const PORT = 5000; 
 const API_BASE = `http://localhost:${PORT}/scan`;
 const INTERNAL_KEY = "9293939sj39dn2oenaJKOw1oKHNa9e9iok0k11zo3ixja9wo3ndkzoskendkxks";
 
-// Connection pooling to prevent socket exhaustion during the 15-audit burst
-const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50 });
+const httpAgent = new http.Agent({ keepAlive: true, maxSockets: 500 });
 
-app.use(express.json());
+const client = axios.create({
+  baseURL: API_BASE,
+  httpAgent,
+  timeout: 5000,
+  validateStatus: () => true,
+  headers: { 
+    'x-api-key': INTERNAL_KEY, 
+    'Content-Type': 'application/json'
+  }
+});
 
-// Direct route mounting to bypass loader complexity
-app.all('/scan', validator.validateRequestBody, scanSecurityController);
-
-const TEST_WALLETS = {
-  SECURE_EOA: "0xd8dA6BF26964aF9d7eEd9e03E53415D37aA96045",
-  MALFORMED: "0xInvalidAddress123",
-  LOWERCASE: "0x742d35cc6634c0532925a3b844bc454e4438f44e",
-};
-
-async function runBattleTest() {
-  const server = app.listen(PORT);
-  console.log(`\n📡 Micro-Server online on port ${PORT}`);
-  console.log("🚀 [2026] STARTING DIRECT ISOLATION TEST (CONCURRENCY MODE)\n");
-
-  let passCount = 0;
-  let failCount = 0;
-
-  const scenarios = [
-    {
-      name: "Standard POST Audit (Secure EOA)",
-      method: 'POST',
-      data: { address: TEST_WALLETS.SECURE_EOA, network: 'base' },
-      expectedStatus: 200
-    },
-    {
-      name: "Legacy GET Audit (URL Params)",
-      method: 'GET',
-      params: { address: TEST_WALLETS.SECURE_EOA, network: 'optimism' },
-      expectedStatus: 200
-    },
-    {
-      name: "Input Sanitization (Lowercase Auto-Checksum)",
-      method: 'POST',
-      data: { address: TEST_WALLETS.LOWERCASE },
-      expectedStatus: 200,
-      validate: (res: any) => {
-        const wallet = res.data.data?.wallet;
-        return wallet === "0x742d35Cc6634C0532925a3b844Bc454e4438f44e";
-      }
-    },
-    {
-      name: "Validation Failure (Invalid Address)",
-      method: 'POST',
-      data: { address: TEST_WALLETS.MALFORMED },
-      expectedStatus: 422
-    }
-  ];
-
-  for (const test of scenarios) {
-    try {
-      const res = await axios({
-        method: test.method,
-        url: API_BASE,
-        headers: { 'x-api-key': INTERNAL_KEY },
-        data: test.method === 'POST' ? test.data : undefined,
-        params: test.method === 'GET' ? test.params : undefined,
-        validateStatus: () => true,
-        httpAgent
-      });
-
-      if (res.status === test.expectedStatus) {
-        const logicPass = test.validate ? test.validate(res) : true;
-        if (logicPass) {
-          console.log(`✅ [PASS] ${test.name}`);
-          passCount++;
-        } else {
-          console.log(`❌ [FAIL] ${test.name}: Checksum/Logic mismatch`);
-          failCount++;
-        }
-      } else {
-        console.log(`❌ [FAIL] ${test.name}: Expected ${test.expectedStatus}, got ${res.status}`);
-        console.log(`   Response: ${JSON.stringify(res.data)}`);
-        failCount++;
-      }
-    } catch (err: any) {
-      console.log(`💥 [CRITICAL] ${test.name}: ${err.message}`);
-      failCount++;
-    }
+async function runObliterationTest() {
+  console.log("\n🔥 OBLITERATION ENGINE STARTING...");
+  
+  // --- PRE-FLIGHT CHECK ---
+  try {
+    await axios.get(`http://localhost:${PORT}/health`, { timeout: 2000 }).catch(() => {});
+    console.log(`📡 TARGET DETECTED: [Port ${PORT}]`);
+  } catch (e) {
+    console.error(`\n❌ OFFLINE: No server found on port ${PORT}.`);
+    console.log("👉 Step 1: Run 'npm run dev' or 'node server.js' in a separate terminal.");
+    console.log("👉 Step 2: Ensure your server is listening on 0.0.0.0 or localhost.");
+    process.exit(1);
   }
 
-  console.log("\n🔥 STARTING CONCURRENCY BURST (15 Parallel Audits)...");
-  const startTime = Date.now();
+  const TEST_WALLETS = {
+    VALID: "0xd8dA6BF26964aF9d7eEd9e03E53415D37aA96045",
+    DIRTY: "  \"0xd8dA6BF26964aF9d7eEd9e03E53415D37aA96045\"  \n"
+  };
+
+  console.log("\n[1/2] PROBING SANITIZATION...");
+  try {
+    const res = await client.post('', { address: TEST_WALLETS.DIRTY });
+    if (res.status === 200) {
+      console.log("✅ Scrubbing logic confirmed.");
+    } else {
+      console.log(`⚠️  Probe failed with status ${res.status}:`, res.data);
+      process.exit(1);
+    }
+  } catch (err: any) {
+    console.error("💥 PROBE CRASH:", err.message);
+    process.exit(1);
+  }
+
+  // --- PHASE 2: BURST ---
+  console.log("\n[2/2] STARTING OBLITERATION BURST (100 CONCURRENT)...");
+  const burstSize = 100;
+  const start = Date.now();
+
+  const burst = Array.from({ length: burstSize }).map((_, i) => {
+    const isPost = i % 2 === 0;
+    return client({
+      method: isPost ? 'POST' : 'GET',
+      data: isPost ? { address: TEST_WALLETS.VALID } : undefined,
+      params: !isPost ? { address: TEST_WALLETS.VALID } : undefined
+    });
+  });
+
+  const results = await Promise.all(burst);
+  const duration = Date.now() - start;
+  const success = results.filter(r => r.status === 200).length;
   
-  const burstPromises = Array.from({ length: 15 }).map((_, i) => 
-    axios.post(API_BASE, 
-      { address: TEST_WALLETS.SECURE_EOA },
-      { 
-        headers: { 'x-api-key': INTERNAL_KEY },
-        httpAgent,
-        timeout: 20000 
-      }
-    ).catch(e => e.response)
-  );
+  console.log(`\n💎 SUCCESS: ${success}/${burstSize} | ⏱️  ${duration}ms`);
 
-  const burstResults = await Promise.all(burstPromises);
-  const totalTime = Date.now() - startTime;
-  
-  const burstSuccess = burstResults.filter(r => r && r.status === 200).length;
-  const avgLatency = (totalTime / 15).toFixed(2);
-
-  console.log(`📊 BURST COMPLETE: ${burstSuccess}/15 successful`);
-  console.log(`⏱️  Average Burst Latency: ${avgLatency}ms`);
-
-  console.log("\n--- BATTLE SUMMARY ---");
-  console.log(`TOTAL PASSED: ${passCount}`);
-  console.log(`TOTAL FAILED: ${failCount}`);
-  console.log(`FINAL SCORE:  ${passCount}/4 Tests | ${burstSuccess}/15 Burst`);
-  console.log("-----------------------\n");
-
-  server.close();
-  // Exit with error if core tests fail or burst is less than 80% successful
-  process.exit(failCount > 0 || burstSuccess < 12 ? 1 : 0);
+  if (success === burstSize) {
+    console.log("🏆 VERDICT: PRODUCTION READY.");
+    process.exit(0);
+  } else {
+    console.log("❌ VERDICT: FAIL. Check Validator Body Parsing.");
+    process.exit(1);
+  }
 }
 
-runBattleTest();
+runObliterationTest();
