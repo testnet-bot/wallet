@@ -53,13 +53,18 @@ model ApiKey {
   expiresAt    DateTime?        // Key-level expiration
   usageLimit   Int              @default(10000)   // Quota enforcement
   metadata     Json?            // Stores capabilities and provisioning logs
-  createdAt    DateTime         @default(now())
-  updatedAt    DateTime         @updatedAt
-  lastUsedAt   DateTime?        // Correctly tracked in validator.ts
-  lastActive   DateTime         @default(now())
-  usage        Int              @default(0)
-  subscription ApiSubscription?
-  analytics    ApiAnalytics[]
+  
+  // --- 🚀 SAAS MONETIZATION UPGRADE ---
+  tier         String           @default("FREE")  // FREE, PRO, ENTERPRISE
+  permissions  Json?            // { "canSeeForensics": true, "fullHistory": true }
+  
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  lastUsedAt    DateTime?        // Correctly tracked in validator.ts
+  lastActive    DateTime         @default(now())
+  usage         Int              @default(0)
+  subscription  ApiSubscription?
+  analytics     ApiAnalytics[]
 
   @@index([wallet])
   @@index([key, status]) // Optimized: Composite index for auth speed
@@ -173,6 +178,10 @@ model ForensicAudit {
   contractMetadata  Json     
   behaviorPatterns  Json     
   traceId           String?  @unique
+  
+  // --- 🛡️ INTEL LINK ---
+  registryId        String?  // Reference to SecurityLiveRegistry
+  
   createdAt         DateTime @default(now())
   
   @@index([walletAddress, targetAddress])
@@ -187,11 +196,18 @@ model ApiAnalytics {
   traceId       String?  
   riskDetected  Boolean  @default(false)
   gasSaved      String?  
+  
+  // --- 📊 SAAS TRACKING ---
+  method        String   @default("GET")
+  ipAddress     String?
+  userAgent     String?
+  
   createdAt     DateTime @default(now())
   apiKey        ApiKey    @relation(fields: [apiKeyId], references: [id])
 
   @@index([apiKeyId, createdAt])
 }
+
 // --- WIP SECURITY INTELLIGENCE MODELS ---
 
 model SecurityLiveRegistry {
@@ -203,16 +219,23 @@ model SecurityLiveRegistry {
   securityNote      String?
   usdValue          Float    @default(0)
   fingerprint       String   // keccak256(bytecode + implementationSlot)
+  
+  // --- INSTITUTIONAL ANALYTICS ---
+  initialFingerprint String?  // The "Birth Fingerprint"
+  isProxy            Boolean  @default(false)
+  upgradeCount       Int      @default(0)
+  firstSeenAt        DateTime @default(now())
+  isVerifiedSource   Boolean  @default(false) // Verified on explorer
+  
   isHoneypot        Boolean  @default(false)
   sellTax           Float    @default(0)
-  
-  
   timesScanned      Int      @default(1)
   lastChangeFound   DateTime?
   lastScanned       DateTime @default(now())
 
   @@unique([address, chainId])
   @@index([status])
+  @@index([firstSeenAt])
 }
 
 model SecurityMasterArchive {

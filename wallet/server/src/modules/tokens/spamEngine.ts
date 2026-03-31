@@ -4,10 +4,10 @@ import { logger } from '../../utils/logger.js';
 import { ethers, isAddress, keccak256, solidityPacked } from 'ethers';
 
 /**
- * AEGIS-ENGINE v3.0 (2026 Sovereign Grade)
+ * AEGIS-ENGINE v3.1 (2026 Sovereign Grade)
  * Core Logic: Autonomous Orchestration, Fingerprint Drift, and Intelligence Lifecycle.
  * Philosophy: Trust the Ledger, Verify the Bytecode, Minimize the Waterfall.
- * Features: Adaptive TTL Scaling, Logic Drift Analytics, Atomic Forensic Sync.
+ * Features: Adaptive TTL Scaling, Proxy Evolution Tracking, Institutional SaaS Sync.
  */
 
 const IMPLEMENTATION_SLOT = "0x3608944802909281900310020130310202202202202202202202202202202202";
@@ -34,11 +34,13 @@ export class AegisEngine {
 
       // 2. BLOCKCHAIN REALITY CHECK (RPC Fingerprinting)
       // We hash the bytecode + proxy implementation to detect logic shifts instantly.
-      // This is a "Silent Scan" that costs $0 in API credits.
       const [onChainCode, onChainProxy] = await Promise.all([
         provider.getCode(address).catch(() => '0x'),
         provider.getStorage(address, IMPLEMENTATION_SLOT).catch(() => '0x0')
       ]);
+      
+      // Check if it's a proxy: If the implementation slot is not empty, it's a proxy.
+      const isProxyContract = onChainProxy !== '0x0000000000000000000000000000000000000000000000000000000000000000';
       
       // Ethers v6: Deterministic fingerprinting of the contract logic state
       const currentFingerprint = keccak256(solidityPacked(['bytes', 'bytes'], [onChainCode, onChainProxy]));
@@ -51,16 +53,15 @@ export class AegisEngine {
         /**
          * EVOLUTION: Trust Multiplier
          * If a token has been scanned many times without a code change, we extend its trust window.
-         * This protects your API quotas from being drained by popular, stable tokens.
          */
         const trustMultiplier = Math.min((live.timesScanned || 1) / 5, 10); 
-        const baseTTL = isMalicious ? 86400000 : 1800000; // 24h for bad tokens, 30m for potential clean tokens
+        const baseTTL = isMalicious ? 86400000 : 1800000; 
         const adaptiveTTL = baseTTL * (codeIntact ? trustMultiplier : 1);
         
         const lastScannedMs = new Date(live.lastScanned).getTime();
         const isStale = (Date.now() - lastScannedMs) > adaptiveTTL;
 
-        // If Malicious: Permanent Block (Never re-ping URLs).
+        // If Malicious: Permanent Block.
         // If Clean & Intact & Not Stale: Instant return from Supabase.
         if (isMalicious || (codeIntact && !isStale)) {
           return live;
@@ -70,7 +71,6 @@ export class AegisEngine {
       }
 
       // 4. INTELLIGENCE WATERFALL (URL Pings - Only triggered when necessary)
-      // This part runs ONLY for new tokens, tokens that changed code, or expired trust windows.
       const [security, price] = await Promise.all([
         runSecurityScan(address, chainId),
         runPriceScan(address, asset.symbol || '', chainId)
@@ -79,9 +79,10 @@ export class AegisEngine {
       const verdict = calculateVerdict(asset, security, price);
 
       // 5. ATOMIC SYNC (Live Registry + Master Archive)
-      // Using a transaction ensures historical data integrity (Forensic Trail for Future Sale).
+      // UPGRADED: Now populates SaaS metrics (upgradeCount, initialFingerprint, isProxy)
       return await prisma.$transaction(async (tx: any) => {
-        // Update or Create the current "Live" state
+        const hasChanged = live && live.fingerprint !== currentFingerprint;
+
         const updated = await tx.securityLiveRegistry.upsert({
           where: { id },
           update: { 
@@ -89,8 +90,10 @@ export class AegisEngine {
             fingerprint: currentFingerprint, 
             lastScanned: new Date(),
             timesScanned: { increment: 1 },
-            // Track exactly when logic shifts occurred
-            lastChangeFound: live?.fingerprint !== currentFingerprint ? new Date() : live?.lastChangeFound
+            isProxy: isProxyContract,
+            // If the fingerprint changed, we increment the upgrade counter for your SaaS data
+            upgradeCount: hasChanged ? { increment: 1 } : undefined,
+            lastChangeFound: hasChanged ? new Date() : live?.lastChangeFound
           },
           create: { 
             id, 
@@ -98,11 +101,14 @@ export class AegisEngine {
             chainId, 
             ...verdict, 
             fingerprint: currentFingerprint,
+            initialFingerprint: currentFingerprint, // Set the "Birth" fingerprint
+            isProxy: isProxyContract,
+            upgradeCount: 0,
             timesScanned: 1
           }
         });
 
-        // Archive entry: Building the "Time-Machine" for the contract's lifecycle
+        // Archive entry: Building the "Time-Machine"
         await tx.securityMasterArchive.create({
           data: {
             address,
@@ -110,7 +116,7 @@ export class AegisEngine {
             previousStatus: live?.status || 'NONE',
             newStatus: verdict.status,
             fingerprint: currentFingerprint,
-            changeType: !live ? 'NEW_DISCOVERY' : (live.fingerprint !== currentFingerprint ? 'PROXY_UPGRADE' : 'RE_VERIFICATION')
+            changeType: !live ? 'NEW_DISCOVERY' : (hasChanged ? 'PROXY_UPGRADE' : 'RE_VERIFICATION')
           }
         });
 
@@ -120,8 +126,6 @@ export class AegisEngine {
     } catch (error) {
       logger.error(`[Aegis-Engine] Logic Failure for ${address}:`, error instanceof Error ? error.stack : error);
       
-      // Fail-Safe: Return a neutral "Clean" status with 0 value to ensure the wallet 
-      // doesn't freeze, but marked as "Deferred" in notes.
       return { 
         status: 'clean', 
         securityNote: 'Verification Deferred (Network Congestion)', 

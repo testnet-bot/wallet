@@ -2,9 +2,9 @@ import { logger } from '../../utils/logger.js';
 import crypto from 'crypto';
 
 /**
- * AEGIS-INTELLIGENCE v2.0 (2026 Enterprise)
- * Core Logic: Pure Security Analytics & Pricing Waterfall
- * Status: Read-Only Intelligence Provider
+ * AEGIS-INTELLIGENCE v3.0 (2026 Enterprise SaaS Edition)
+ * Core Logic: High-Fidelity Security Analytics & Pricing Waterfall
+ * Status: Read-Only Intelligence Provider for Aegis-Engine Mesh
  */
 
 export interface TokenClassification {
@@ -16,6 +16,9 @@ export interface TokenClassification {
   isBlacklisted?: boolean;
   sellTax?: number;
   buyTax?: number;
+  isProxy?: boolean;
+  isVerifiedSource?: boolean;
+  liquidityUsd?: number;
   canRecover: boolean;
 }
 
@@ -64,12 +67,15 @@ async function getGoPlusAuth(): Promise<string> {
 
 /**
  * Intelligent Security Waterfall: Cross-references multiple indicators
+ * UPGRADED: Now extracts Proxy and Verification status for SaaS Registry
  */
 export async function runSecurityScan(address: string, chainId: number) {
   let isHoneypot = false;
   let tax = 0;
   let note = 'Analyzed Clean';
   let blacklisted = false;
+  let isProxy = false;
+  let isVerifiedSource = false;
 
   try {
     const auth = await getGoPlusAuth();
@@ -94,49 +100,60 @@ export async function runSecurityScan(address: string, chainId: number) {
       if (s) {
         isHoneypot = isHoneypot || s.is_honeypot === "1";
         blacklisted = s.is_blacklisted === "1";
+        isProxy = s.is_proxy === "1";
+        // If it's on Etherscan/BscScan, it's more trustworthy for devs
+        isVerifiedSource = s.is_open_source === "1";
+        
         const gpTax = parseFloat(s.sell_tax || "0");
         tax = Math.max(tax, gpTax);
         
         if (s.is_mintable === "1" && s.is_proxy !== "1") note = '🚨 UNRESTRICTED MINTING DETECTED';
         if (s.owner_change_balance === "1") note = '🚨 BALANCE MANIPULATION DETECTED';
+        if (s.hidden_owner === "1") note = '🚨 HIDDEN OWNER (SCAM RISK)';
       }
     }
   } catch (e) {
     logger.error(`[Aegis-Scan] Waterfall partial failure for ${address}`);
   }
 
-  return { isHoneypot, tax, note, blacklisted };
+  return { isHoneypot, tax, note, blacklisted, isProxy, isVerifiedSource };
 }
 
 /**
  * Pricing Waterfall: Fallback logic for low-liquidity assets
+ * UPGRADED: Returns liquidity for SaaS "Confidence Score"
  */
-export async function runPriceScan(address: string, symbol: string, chainId: number): Promise<number> {
+export async function runPriceScan(address: string, symbol: string, chainId: number): Promise<{ price: number, liquidity: number }> {
   const sym = (symbol || '').toLowerCase();
-  if (['eth', 'weth', 'usdc', 'usdt'].includes(sym)) return sym === 'eth' || sym === 'weth' ? 3500 : 1;
+  if (['eth', 'weth', 'usdc', 'usdt'].includes(sym)) {
+    return { price: sym === 'eth' || sym === 'weth' ? 3500 : 1, liquidity: 999999999 };
+  }
 
   try {
     // Primary: DexScreener (Real-time Liquidity)
     const dexRes = await fetch(`${CONFIG.DEXSCREENER_API}/${address}`, { signal: AbortSignal.timeout(5000) }).then(r => r.json());
     const pair = (dexRes.pairs || []).sort((a: any, b: any) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
     
-    if (pair?.liquidity?.usd > CONFIG.LIQUIDITY_FLOOR) return parseFloat(pair.priceUsd);
+    if (pair?.liquidity?.usd > CONFIG.LIQUIDITY_FLOOR) {
+      return { price: parseFloat(pair.priceUsd), liquidity: pair.liquidity.usd };
+    }
 
     // Fallback: DeFi Llama
     const platform = CONFIG.CG_PLATFORM_MAP[String(chainId)] || 'ethereum';
     const llama = await fetch(`${CONFIG.LLAMA_API}/${platform}:${address}`).then(r => r.json());
     const price = llama.coins?.[`${platform}:${address}`]?.price;
-    if (price) return price;
+    if (price) return { price, liquidity: 0 };
   } catch (e) {}
 
-  return 0;
+  return { price: 0, liquidity: 0 };
 }
 
 /**
  * Final Verdict Engine: Weighs Security vs. Metadata vs. Value
+ * UPGRADED: Maps data to the new 2026 SaaS Schema fields
  */
-export function calculateVerdict(asset: any, security: any, price: number): TokenClassification {
-  const usdValue = (parseFloat(asset.balance) || 0) * price;
+export function calculateVerdict(asset: any, security: any, priceData: { price: number, liquidity: number }): TokenClassification {
+  const usdValue = (parseFloat(asset.balance) || 0) * priceData.price;
   const isMalicious = security.isHoneypot || security.tax > 0.40 || security.blacklisted;
   
   let status: TokenClassification['status'] = 'clean';
@@ -154,7 +171,8 @@ export function calculateVerdict(asset: any, security: any, price: number): Toke
       note = 'Phishing: Metadata triggers';
     } else if (usdValue < CONFIG.DUST_THRESHOLD) {
       status = 'dust';
-    } else if (usdValue > 50) {
+    } else if (usdValue > 50 && security.isVerifiedSource && priceData.liquidity > 10000) {
+      // High trust: verified source + good liquidity
       status = 'verified';
     }
   }
@@ -162,10 +180,13 @@ export function calculateVerdict(asset: any, security: any, price: number): Toke
   return {
     status,
     securityNote: note,
-    score: status === 'malicious' ? 0 : (status === 'verified' ? 90 : 60),
+    score: status === 'malicious' ? 0 : (status === 'verified' ? 95 : 70),
     usdValue: Number(usdValue.toFixed(4)),
     isHoneypot: security.isHoneypot,
     sellTax: security.tax,
+    isProxy: security.isProxy,
+    isVerifiedSource: security.isVerifiedSource,
+    liquidityUsd: priceData.liquidity,
     canRecover: status !== 'malicious' && usdValue > 3.50
   };
 }
