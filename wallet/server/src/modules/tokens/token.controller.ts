@@ -3,9 +3,10 @@ import { isAddress, getAddress } from 'ethers';
 import { tokenService } from './token.service.js';
 import { logger } from '../../utils/logger.js';
 import crypto from 'crypto';
+import Decimal from 'decimal.js';
 
 /**
- * UPGRADED: Aegis-Sovereign Token Controller v3.2 (2026)
+ * UPGRADED: Aegis-Sovereign Token Controller v3.2 (2026) - PRODUCTION HARDENED
  * Features: Request Timeout guards, Logic Drift Analytics, 
  * Institutional Risk Reporting, and SaaS-aligned Metadata.
  * Alignment: Fully synchronized with Aegis-Engine v3.2 and SpamDetector v3.0.
@@ -45,19 +46,23 @@ export async function scanTokensController(req: Request, res: Response) {
     
     // 4. SERVICE EXECUTION (Aligned with tokenService update)
     // Note: tokenService.fetchWalletTokens now returns assets enriched by Aegis-Engine v3.2
-    const report = await tokenService.fetchWalletTokens(checksummedAddress);
+    // UPGRADE: Passed forceRefresh to ensure institutional data freshnesh when requested
+    const reportData = await tokenService.fetchWalletTokens(checksummedAddress, forceRefresh);
+    
+    // Support both raw array or object-wrapped report from upgraded tokenService
+    const report = Array.isArray(reportData) ? reportData : (reportData.all || []);
     
     clearTimeout(timeout);
 
     // 5. STRUCTURED FINANCIAL & RISK ANALYTICS (UPGRADED)
-    // We now track Proxy counts and Malicious drifts for the dashboard.
+    // PRODUCTION FIX: Using Decimal.js for precise financial aggregation in the controller
     const analytics = report.reduce((acc: any, asset: any) => {
-      const value = asset.usdValue || 0;
-      acc.totalUsdValue += value;
+      const value = new Decimal(asset.usdValue || 0);
+      acc.totalUsdValue = acc.totalUsdValue.plus(value);
       
       // Categorize Value
-      if (asset.type === 'native') acc.nativeValue += value;
-      else acc.erc20Value += value;
+      if (asset.type === 'native') acc.nativeValue = acc.nativeValue.plus(value);
+      else acc.erc20Value = acc.erc20Value.plus(value);
       
       // Categorize Security Status (Aligned with TokenClassification)
       // UPGRADE: Added 'honeypot' and 'drainer' detection hooks from SpamDetector v3.0
@@ -73,9 +78,9 @@ export async function scanTokensController(req: Request, res: Response) {
 
       return acc;
     }, { 
-      totalUsdValue: 0, 
-      nativeValue: 0, 
-      erc20Value: 0, 
+      totalUsdValue: new Decimal(0), 
+      nativeValue: new Decimal(0), 
+      erc20Value: new Decimal(0), 
       maliciousCount: 0, 
       spamCount: 0, 
       verifiedCount: 0, 
@@ -85,7 +90,8 @@ export async function scanTokensController(req: Request, res: Response) {
     });
 
     // Set Cache Headers
-    res.setHeader('Cache-Control', 'public, max-age=60');
+    // PRODUCTION FIX: Changed to 'private' to prevent CDN/Proxy caching of sensitive financial data
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
 
     return res.status(200).json({
       success: true,
