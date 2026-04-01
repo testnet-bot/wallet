@@ -1,182 +1,211 @@
-🌐 RPC Test Results - 2026-04-01T07:59:12.698Z
+🌐 RPC Test Results - 2026-04-01T08:10:34.055Z
 
 🌐 Testing all EVM chains (54)...
 
 🔗 Ethereum (ID: 1)
-  ✅ https://eth.drpc.org | latency: 110ms | block: 0x17a2a32
-  ❌ https://rpc.ankr.com | error: HTTP 404
+  ✅ https://eth.drpc.org | latency: 139ms | block: 0x17a2a6b
+  ✅ https://rpc.ankr.com/eth | latency: 95ms | block: undefined
 
 🔗 BNB Smart Chain (ID: 56)
-  ❌ https://binance.llamarpc.com | error: fetch failed
-  ✅ https://bsc-dataseed.binance.org | latency: 70ms | block: 0x55ca663
+  ✅ https://bsc.drpc.org | latency: 62ms | block: 0x55cac4b
+  ✅ https://bsc-dataseed.binance.org | latency: 83ms | block: 0x55cac4a
 
 🔗 Polygon (ID: 137)
-  ✅ https://polygon.drpc.org | latency: 65ms | block: 0x5105015
-  ❌ https://rpc.ankr.com | error: HTTP 404
+  ✅ https://polygon.drpc.org | latency: 57ms | block: 0x510516a
+  ✅ https://rpc.ankr.com/polygon | latency: 19ms | block: undefined
 
 🔗 Base (ID: 8453)
-  ✅ https://mainnet.base.org | latency: 113ms | block: 0x2a139b6
-  ✅ https://base.drpc.org | latency: 76ms | block: 0x2a139b7
+  ✅ https://base.drpc.org | latency: 52ms | block: 0x2a13b0b
+  ✅ https://mainnet.base.org | latency: 168ms | block: 0x2a13b0b
 
 🔗 Arbitrum One (ID: 42161)
-  ✅ https://arbitrum.drpc.org | latency: 55ms | block: 0x1ab1ad57
-  ❌ https://arb1.arbitrum.io | error: HTTP 403
+  ✅ https://arbitrum.drpc.org | latency: 71ms | block: 0x1ab1b801
+  ✅ https://arb1.arbitrum.io/rpc | latency: 123ms | block: 0x1ab1b7ff
 
 🔗 Optimism (ID: 10)
-  ✅ https://optimism.drpc.org | latency: 86ms | block: 0x8ec7b4c
-  ✅ https://mainnet.optimism.io | latency: 58ms | block: 0x8ec7b4c
+  ✅ https://optimism.drpc.org | latency: 58ms | block: 0x8ec7ca0
+  ✅ https://mainnet.optimism.io | latency: 66ms | block: 0x8ec7ca0
 
 🔗 Avalanche (ID: 43114)
-  ✅ https://avalanche.drpc.org | latency: 52ms | block: 0x4e06ec0
-  ❌ https://rpc.ankr.com | error: HTTP 404
+  ✅ https://avalanche.drpc.org | latency: 52ms | block: 0x4e0715e
+  ✅ https://rpc.ankr.com/avalanche | latency: 18ms | block: undefined
 
 🔗 zkSync Era (ID: 324)
-  ✅ https://mainnet.era.zksync.io | latency: 126ms | block: 0x4222344
-  ✅ https://zksync.drpc.org | latency: 208ms | block: 0x4222344
+  ✅ https://mainnet.era.zksync.io | latency: 133ms | block: 0x4222401
+  ✅ https://zksync.drpc.org | latency: 110ms | block: 0x4222401
 
 🔗 Sonic (ID: 146)
-  ✅ https://rpc.soniclabs.com | latency: 115ms | block: 0x3f5a83f
-  ✅ https://sonic.drpc.org | latency: 50ms | block: 0x3f5a83f
+  ✅ https://sonic.drpc.org | latency: 59ms | block: 0x3f5aa4c
+  ✅ https://rpc.soniclabs.com | latency: 369ms | block: 0x3f5aa4d
 
 🔗 Sei Network (ID: 1329)
-  ❌ https://sei-rpc.brochain.org | error: fetch failed
-  ✅ https://sei.drpc.org | latency: 99ms | block: 0xbf1dbf3
+  ✅ https://sei.drpc.org | latency: 112ms | block: 0xbf1e003
+  ✅ https://sei-rpc.publicnode.com | latency: 75ms | block: undefined
 
 🔗 Linea (ID: 59144)
-  ✅ https://linea.drpc.org | latency: 91ms | block: 0x1c9d0cf
-  ✅ https://rpc.linea.build | latency: 138ms | block: 0x1c9d0cf
+  ✅ https://linea.drpc.org | latency: 53ms | block: 0x1c9d150
+  ✅ https://rpc.linea.build | latency: 161ms | block: 0x1c9d150
 
 🔗 Blast (ID: 81457)
-  ✅ https://blast.drpc.org | latency: 43ms | block: 0x1f938fd
-  ✅ https://rpc.blast.io | latency: 61ms | block: 0x1f938fd
+  ✅ https://blast.drpc.org | latency: 110ms | block: 0x1f93a52
+  ✅ https://rpc.blast.io | latency: 84ms | block: 0x1f93a52
 
 🔗 Scroll (ID: 534352)
-  ✅ https://rpc.scroll.io | latency: 38ms | block: 0x1f5fd7f
-  ✅ https://scroll.drpc.org | latency: 49ms | block: 0x1f5fd7f
+  ✅ https://scroll.drpc.org | latency: 105ms | block: 0x1f5ff2e
+  ✅ https://rpc.scroll.io | latency: 235ms | block: 0x1f5ff30
 
 🔗 Mantle (ID: 5000)
-  ✅ https://rpc.mantle.xyz | latency: 86ms | block: 0x591ef25
-  ✅ https://mantle.drpc.org | latency: 130ms | block: 0x591ef25
+  ✅ https://mantle.drpc.org | latency: 57ms | block: 0x591f07a
+  ✅ https://rpc.mantle.xyz | latency: 233ms | block: 0x591f07a
 
 🔗 Polygon zkEVM (ID: 1101)
-  ✅ https://zkevm-rpc.com | latency: 27ms | block: 0x1d75023
+  ✅ https://zkevm-rpc.com | latency: 67ms | block: 0x1d750f7
 
 🔗 Celo (ID: 42220)
-  ✅ https://forno.celo.org | latency: 38ms | block: 0x3c347f7
-  ✅ https://celo.drpc.org | latency: 52ms | block: 0x3c347fc
+  ✅ https://celo.drpc.org | latency: 100ms | block: 0x3c34aa6
+  ✅ https://forno.celo.org | latency: 53ms | block: 0x3c34aa5
 
 🔗 Gnosis (ID: 100)
-  ✅ https://rpc.gnosischain.com | latency: 73ms | block: 0x2b57688
-  ✅ https://gnosis.drpc.org | latency: 134ms | block: 0x2b57688
+  ✅ https://gnosis.drpc.org | latency: 102ms | block: 0x2b5770e
+  ✅ https://rpc.gnosischain.com | latency: 100ms | block: 0x2b5770e
 
 🔗 Fantom (ID: 250)
-  ❌ https://rpc.ftm.tools | error: HTTP 401
-  ✅ https://fantom.drpc.org | latency: 122ms | block: 0x7361955
+  ✅ https://fantom.drpc.org | latency: 63ms | block: 0x73619b5
+  ✅ https://rpc.ankr.com/fantom | latency: 17ms | block: undefined
 
 🔗 Moonbeam (ID: 1284)
-  ✅ https://rpc.api.moonbeam.network | latency: 74ms | block: 0xe59213
+  ✅ https://moonbeam.drpc.org | latency: 110ms | block: 0xe5927d
+  ✅ https://rpc.api.moonbeam.network | latency: 51ms | block: 0xe5927d
 
 🔗 Moonriver (ID: 1285)
-  ❌ https://rpc.api.moonriver.network | error: fetch failed
+  ✅ https://moonriver.publicnode.com | latency: 97ms | block: 0xefd6f9
 
 🔗 Cronos (ID: 25)
-  ✅ https://evm.cronos.org | latency: 73ms | block: 0x3c02332
+  ✅ https://cronos.drpc.org | latency: 114ms | block: 0x3c0296c
+  ✅ https://evm.cronos.org | latency: 73ms | block: 0x3c0296d
 
 🔗 X Layer (ID: 196)
-  ❌ https://xlayer-rpc.okx.com | error: fetch failed
+  ✅ https://xlayer.drpc.org | latency: 126ms | block: 0x35a7d6d
+  ✅ https://rpc.xlayer.tech | latency: 238ms | block: 0x35a7d71
 
 🔗 Taiko (ID: 167000)
-  ✅ https://rpc.mainnet.taiko.xyz | latency: 122ms | block: 0x4bedf5
+  ✅ https://taiko.drpc.org | latency: 115ms | block: 0x4bee4e
+  ✅ https://rpc.mainnet.taiko.xyz | latency: 126ms | block: 0x4bee4e
 
 🔗 opBNB (ID: 204)
-  ✅ https://opbnb-mainnet-rpc.bnbchain.org | latency: 337ms | block: 0x79bd749
+  ✅ https://opbnb.drpc.org | latency: 51ms | block: 0x79be1ec
+  ✅ https://opbnb-mainnet-rpc.bnbchain.org | latency: 342ms | block: 0x79be1ef
 
 🔗 Metis (ID: 1088)
-  ✅ https://andromeda.metis.io | latency: 136ms | block: 0x156a7a3
+  ✅ https://metis.drpc.org | latency: 108ms | block: 0x156a7cc
+  ✅ https://andromeda.metis.io | latency: 142ms | block: 0x156a7cc
 
 🔗 Chiliz (ID: 88888)
-  ✅ https://rpc.chiliz.com | latency: 51ms | block: 0x1f3e2c1
+  ❌ https://chiliz.drpc.org | error: HTTP 404
+  ✅ https://rpc.chiliz.com | latency: 92ms | block: 0x1f3e3a4
 
 🔗 Core (ID: 1116)
-  ✅ https://rpc.coredao.org | latency: 118ms | block: 0x20562aa
+  ✅ https://core.drpc.org | latency: 123ms | block: 0x205638e
+  ✅ https://rpc.coredao.org | latency: 139ms | block: 0x205638e
 
 🔗 World Chain (ID: 480)
-  ❌ https://worldchain-mainnet.g.alchemy.com | error: HTTP 404
+  ✅ https://worldchain.drpc.org | latency: 120ms | block: 0x1a8ec14
 
 🔗 Evmos (ID: 9001)
-  ✅ https://evmos-evm-rpc.publicnode.com | latency: 63ms | block: 0x22ad0bf
+  ✅ https://evmos.drpc.org | latency: 112ms | block: 0x22ad15f
+  ✅ https://evmos-evm-rpc.publicnode.com | latency: 43ms | block: 0x22ad15f
 
 🔗 Canto (ID: 7700)
   ❌ https://canto.drpc.org | error: HTTP 404
+  ❌ https://mainnet.canto.io | error: fetch failed
 
 🔗 Kava EVM (ID: 2222)
-  ✅ https://evm.kava.io | latency: 361ms | block: 0x13218d7
+  ✅ https://kava.drpc.org | latency: 105ms | block: 0x132194e
+  ✅ https://evm.kava.io | latency: 372ms | block: 0x132194e
 
 🔗 Fuse (ID: 122)
-  ✅ https://rpc.fuse.io | latency: 67ms | block: 0x274eca9
+  ✅ https://fuse.drpc.org | latency: 107ms | block: 0x274ed31
+  ✅ https://rpc.fuse.io | latency: 68ms | block: 0x274ed32
 
 🔗 Telos EVM (ID: 40)
-  ✅ https://mainnet.telos.net | latency: 448ms | block: undefined
+  ✅ https://telos.drpc.org | latency: 50ms | block: 0x1b6bd4bc
+  ✅ https://mainnet.telos.net | latency: 235ms | block: undefined
 
 🔗 Rootstock (ID: 30)
-  ✅ https://public-node.rsk.co | latency: 480ms | block: 0x848a1e
+  ✅ https://rootstock.drpc.org | latency: 104ms | block: 0x848a38
+  ✅ https://public-node.rsk.co | latency: 654ms | block: 0x848a39
 
 🔗 Ethereum Classic (ID: 61)
-  ✅ https://etc.rivet.link | latency: 395ms | block: 0x17281bf
+  ✅ https://etc.drpc.org | latency: 114ms | block: 0x17281f7
+  ✅ https://etc.rivet.link | latency: 414ms | block: 0x17281f7
 
 🔗 Velas (ID: 106)
-  ❌ https://evmexplorer.velas.com | error: HTTP 404
+  ❌ https://velas-evm.publicnode.com | error: HTTP 404
 
 🔗 Syscoin (ID: 57)
-  ✅ https://rpc.syscoin.org | latency: 95ms | block: 0xdae48
+  ❌ https://syscoin.drpc.org | error: HTTP 404
+  ✅ https://rpc.syscoin.org | latency: 110ms | block: 0xdae4b
 
 🔗 Ronin (ID: 2020)
-  ❌ https://api.roninchain.com | error: HTTP 404
+  ✅ https://ronin.drpc.org | latency: 56ms | block: 0x33de706
+  ✅ https://api.roninchain.com/rpc | latency: 145ms | block: 0x33de706
 
 🔗 Boba Network (ID: 288)
-  ✅ https://mainnet.boba.network | latency: 419ms | block: 0x1e879d7
+  ❌ https://boba.drpc.org | error: HTTP 404
+  ✅ https://mainnet.boba.network | latency: 394ms | block: 0x1e87b2c
 
 🔗 CLV (ID: 1024)
-  ❌ https://rpc-iris.clv.org | error: fetch failed
+  ✅ https://iris-evm-rpc.publicnode.com | latency: 94ms | block: 0x211dc9d
 
 🔗 IoTeX (ID: 4689)
-  ✅ https://babel-api.mainnet.iotex.io | latency: 156ms | block: 0x2c7c925
+  ❌ https://iotex.drpc.org | error: HTTP 400
+  ✅ https://babel-api.mainnet.iotex.io | latency: 180ms | block: 0x2c7ca37
 
 🔗 Dogechain (ID: 2000)
-  ✅ https://rpc.dogechain.dog | latency: 622ms | block: 0x365bd75
+  ❌ https://dogechain.drpc.org | error: HTTP 404
+  ✅ https://rpc.dogechain.dog | latency: 412ms | block: 0x365beca
 
 🔗 Arbitrum Nova (ID: 42170)
-  ❌ https://nova.arbitrum.io | error: HTTP 403
+  ❌ https://nova.drpc.org | error: HTTP 404
+  ✅ https://nova.arbitrum.io/rpc | latency: 129ms | block: 0x50e35ab
 
 🔗 Zilliqa EVM (ID: 55)
-  ✅ https://api.zilliqa.com | latency: 429ms | block: 0x16667a5
+  ❌ https://zilliqa.drpc.org | error: HTTP 404
+  ✅ https://api.zilliqa.com | latency: 323ms | block: 0x16669f9
 
 🔗 Flare (ID: 14)
-  ❌ https://flare-api.flare.network | error: HTTP 404
+  ❌ https://flare.drpc.org | error: HTTP 400
+  ✅ https://rpc.ankr.com/flare | latency: 58ms | block: 0x374116e
 
 🔗 Songbird (ID: 19)
-  ❌ https://songbird-api.flare.network | error: HTTP 404
+  ❌ https://songbird.drpc.org | error: HTTP 400
+  ❌ https://rpc.ankr.com/songbird | error: HTTP 403
 
 🔗 Goerli (ID: 5)
-  ❌ https://rpc.ankr.com | error: HTTP 404
+  ❌ https://rpc.ankr.com/eth_goerli | error: HTTP 403
 
 🔗 Sepolia (ID: 11155111)
-  ❌ https://rpc.sepolia.org | error: This operation was aborted
+  ✅ https://sepolia.drpc.org | latency: 48ms | block: 0xa13a99
+  ✅ https://rpc.ankr.com/eth_sepolia | latency: 17ms | block: undefined
 
 🔗 Base Sepolia (ID: 84532)
-  ✅ https://sepolia.base.org | latency: 356ms | block: 0x25cb8bf
+  ✅ https://sepolia.base.org | latency: 112ms | block: 0x25cba12
+  ✅ https://base-sepolia.drpc.org | latency: 54ms | block: 0x25cba12
 
 🔗 Arbitrum Sepolia (ID: 421614)
-  ❌ https://sepolia-rollup.arbitrum.io | error: HTTP 404
+  ✅ https://arbitrum-sepolia.drpc.org | latency: 104ms | block: 0xf3bff0c
+  ✅ https://sepolia-rollup.arbitrum.io/rpc | latency: 121ms | block: 0xf3bff0c
 
 🔗 OP Sepolia (ID: 11155420)
-  ✅ https://sepolia.optimism.io | latency: 56ms | block: 0x27afa59
+  ✅ https://optimism-sepolia.drpc.org | latency: 109ms | block: 0x27afbac
+  ✅ https://sepolia.optimism.io | latency: 48ms | block: 0x27afbad
 
 🔗 Polygon Amoy (ID: 80002)
-  ✅ https://rpc-amoy.polygon.technology | latency: 26ms | block: 0x2249333
+  ✅ https://polygon-amoy.drpc.org | latency: 64ms | block: 0x2249486
+  ✅ https://rpc-amoy.polygon.technology | latency: 33ms | block: 0x2249486
 
 🔗 BNB Testnet (ID: 97)
-  ✅ https://bsc-testnet.drpc.org | latency: 65ms | block: 0x5e7fcd0
+  ✅ https://bsc-testnet.drpc.org | latency: 97ms | block: 0x5e802b5
 
 🔗 Localhost (ID: 1337)
   ❌ http://127.0.0.1:8545 | error: fetch failed
