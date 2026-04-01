@@ -1,5 +1,6 @@
 import { scanGlobalWallet } from '../../blockchain/walletScanner.js';
-import { classifyToken } from './spamDetector.js';
+import { runSecurityScan, runPriceScan, calculateVerdict } from './spamDetector.js';
+import { AegisEngine } from './spamEngine.js'; // Upgrade: The primary intelligence orchestrator
 import { logger } from '../../utils/logger.js';
 import crypto from 'crypto';
 import pLimit from 'p-limit';
@@ -7,6 +8,7 @@ import pLimit from 'p-limit';
 /**
  * UPGRADED: Institutional Token Intelligence Engine (v2026.5).
  * Optimized for: Wallet Service Compatibility and Strict Type Safety.
+ * Philosophy: Real-time Fingerprinting via Aegis-Engine Mesh.
  */
 export const tokenService = {
   cache: new Map<string, { data: any, timestamp: number }>(),
@@ -20,7 +22,8 @@ export const tokenService = {
     
     if (this.locks.has(safeAddr)) {
       logger.warn(`[TokenService][${traceId}] Scan in progress for ${safeAddr}`);
-      await new Promise(r => setTimeout(r, 1500));
+      // Upgrade: Jitter-wait to prevent thundering herd on the same wallet
+      await new Promise(r => setTimeout(r, 1500 + Math.random() * 500));
     }
 
     if (!forceRefresh && this.cache.has(safeAddr)) {
@@ -53,28 +56,45 @@ export const tokenService = {
   },
 
   async categorizeAssets(rawAssets: any[], traceId: string = 'INTERNAL') {
+    // Production Upgrade: Concurrency limit adjusted for high-availability RPCs
     const limit = pLimit(20); 
     
     const results = await Promise.allSettled(
       rawAssets.map((asset) => 
         limit(async () => {
           try {
-            const analysis = await classifyToken(asset) as any;
+            /**
+             * PRODUCTION ALIGNMENT: AegisEngine Orchestration
+             * AegisEngine performs the fingerprinting, pricing, and 
+             * database persistence we just battle-tested.
+             */
+            const analysis = await AegisEngine.getVerdict(asset) as any;
             
-            const isSuspicious = analysis.status === 'spam' || 
-                                analysis.isHoneypot || 
-                                (parseFloat(asset.balance) > 0 && !analysis.usdValue && !asset.logo);
+            // Waterfall Fallback: If engine is deferred, manually calculate verdict
+            let finalAnalysis = analysis;
+            if (analysis.status === 'clean' && analysis.securityNote?.includes('Deferred')) {
+              const security = await runSecurityScan(asset.address, asset.chainId);
+              const pricing = await runPriceScan(asset.address, asset.symbol || '', asset.chainId);
+              finalAnalysis = calculateVerdict(asset, security, pricing);
+            }
+
+            const isSuspicious = finalAnalysis.status === 'spam' || 
+                                finalAnalysis.status === 'malicious' ||
+                                finalAnalysis.isHoneypot || 
+                                (parseFloat(asset.balance) > 0 && !finalAnalysis.usdValue && !asset.logo);
             
             return { 
               ...asset, 
-              ...analysis,
+              ...finalAnalysis,
               isSuspicious,
               // Fixed: Dynamic property check to satisfy TypeScript
-              hasTransferHook: !!(analysis.hasHooks || analysis.hasTransferHook),
+              hasTransferHook: !!(finalAnalysis.hasHooks || finalAnalysis.hasTransferHook),
               lastAudit: new Date().toISOString(),
-              isRecoverable: analysis.canRecover && !isSuspicious && !analysis.isBlacklisted
+              // Strict Recovery Check for real finance
+              isRecoverable: finalAnalysis.canRecover && !isSuspicious && !finalAnalysis.isBlacklisted
             };
           } catch (e: any) {
+            logger.warn(`[TokenService][${traceId}] Asset Audit bypassed: ${asset.symbol}`);
             return { ...asset, status: 'audit_failed', usdValue: 0, isRecoverable: false };
           }
         })
@@ -90,7 +110,8 @@ export const tokenService = {
     const recoverableValue = recoverable.reduce((sum, a) => sum + (Number(a.usdValue) || 0), 0);
 
     const riskRatio = totalValue > 0 ? (recoverableValue / totalValue) : 1;
-    const healthStatus = riskRatio < 0.3 ? 'CRITICAL_EXPOSURE' : riskRatio < 0.7 ? 'DEGRADED' : 'OPTIMAL';
+    // Upgrade: Strict risk thresholds for Sovereign wallets
+    const healthStatus = riskRatio < 0.4 ? 'CRITICAL_EXPOSURE' : riskRatio < 0.75 ? 'DEGRADED' : 'OPTIMAL';
 
     return {
       summary: {
@@ -102,7 +123,8 @@ export const tokenService = {
         healthStatus,
         riskScore: Number((riskRatio * 100).toFixed(0)),
         spamCount: audited.filter(a => a.status === 'spam').length,
-        dustCount: audited.filter(a => a.status === 'dust').length
+        dustCount: audited.filter(a => a.status === 'dust').length,
+        maliciousCount: audited.filter(a => a.status === 'malicious').length
       },
       groups: {
         liquid: recoverable.sort((a, b) => (b.usdValue || 0) - (a.usdValue || 0)),

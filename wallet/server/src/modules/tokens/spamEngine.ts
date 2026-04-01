@@ -57,6 +57,9 @@ export class AegisEngine {
         provider.getStorage(address, IMPLEMENTATION_SLOT).catch(() => '0x00')
       ]);
       
+      // UPGRADE: GATEKEEPER - Verify if address is a Contract or a regular Wallet (EOA)
+      const isContract = onChainCode !== '0x' && onChainCode !== '0x0' && onChainCode !== null;
+
       // Upgrade: Standardize hex length to 32-bytes to prevent Ethers v6 "invalid BytesLike" errors
       const onChainProxy = (rawProxy === '0x' || rawProxy === '0x0' || !rawProxy) 
         ? zeroPadValue('0x00', 32) 
@@ -104,6 +107,11 @@ export class AegisEngine {
       ]);
 
       const verdict = calculateVerdict(asset, security, priceData);
+
+      // UPGRADE: BYPASS PERSISTENCE for non-contract addresses to prevent DB bloat
+      if (!isContract) {
+        return { ...verdict, isProxy: false, fingerprint: currentFingerprint };
+      }
 
       // 5. ATOMIC SYNC (Live Registry + Master Archive)
       // UPGRADED: Added Recursive Retry Loop with Randomized Jitter for high-concurrency stability

