@@ -11,6 +11,10 @@ import { ethers, isAddress, keccak256, solidityPacked, zeroPadValue } from 'ethe
  * Features: Adaptive TTL Scaling, Proxy Evolution Tracking, SaaS Sync.
  * Alignment: Integrated with Object-based Pricing Waterfall & multi-RPC Resolver.
  */
+const SECURITY_CACHE: Record<string, any> = {};
+const PRICE_CACHE: Record<string, any> = {};
+const CACHE_TTL = 1000 * 60 * 30; 
+
 const RPC_CONCURRENCY = 5; 
 let activeRpcCalls = 0;
 const rpcQueue: (() => void)[] = [];
@@ -40,7 +44,28 @@ export class AegisEngine {
     const address = String(asset.address || '').toLowerCase().trim();
     const chainId = Number(asset.chainId) || 1;
     const id = `${chainId}-${address}`;
+let security, priceData; 
 
+const cacheKey = `${chainId}:${address}`;
+const now = Date.now();
+
+// SECURITY CACHE
+if (SECURITY_CACHE[cacheKey] && SECURITY_CACHE[cacheKey].expiry > now) {
+security = SECURITY_CACHE[cacheKey].data;
+logger.info(`[Aegis-Engine] Security hit for ${address}`);
+} else {
+security = await runSecurityScan(address, chainId);
+SECURITY_CACHE[cacheKey] = { data: security, expiry: now + CACHE_TTL };
+}
+
+// PRICE CACHE
+if (PRICE_CACHE[cacheKey] && PRICE_CACHE[cacheKey].expiry > now) {
+priceData = PRICE_CACHE[cacheKey].data;
+logger.info(`[Aegis-Engine] Price hit for ${address}`);
+} else {
+priceData = await runPriceScan(address, asset.symbol || '', chainId);
+PRICE_CACHE[cacheKey] = { data: priceData, expiry: now + CACHE_TTL };
+}
     // Validates address format using Ethers v6 native method
     if (!address || !isAddress(address)) {
       return { status: 'spam', securityNote: 'Invalid Contract Address', usdValue: 0, canRecover: false };

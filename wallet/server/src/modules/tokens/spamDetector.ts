@@ -61,6 +61,10 @@ let tokenExpiry = 0;
 let isRefreshing = false; 
 
 const NATIVE_PRICE_CACHE: Record<string, { price: number, expiry: number }> = {};
+const SECURITY_CACHE: Record<string, { data: any, expiry: number }> = {};
+const PRICE_CACHE: Record<string, { data: { price: number, liquidity: number }, expiry: number }> = {};
+
+const CACHE_TTL = 1000 * 60 * 5; 
 const NATIVE_CACHE_TTL = 1000 * 60 * 30; 
 
 /**
@@ -114,7 +118,14 @@ async function getGoPlusAuth(): Promise<string> {
  * Intelligent Security Waterfall: Multi-Provider Redundancy
  * Hardened for Production Finance with Honeypot.is V2 simulation consensus.
  */
+
 export async function runSecurityScan(address: string, chainId: number) {
+  const cacheKey = `${chainId}:${address.toLowerCase()}`;
+  const now = Date.now();
+
+  if (SECURITY_CACHE[cacheKey] && SECURITY_CACHE[cacheKey].expiry > now) {
+  return SECURITY_CACHE[cacheKey].data;
+  }
   let isHoneypot = false; let tax = 0; let note = 'Analyzed Clean';
   let blacklisted = false; let isProxy = false; let isVerifiedSource = false;
 
@@ -163,7 +174,19 @@ export async function runSecurityScan(address: string, chainId: number) {
 releaseApiSlot();
 }
 
-  return { isHoneypot, tax, note, blacklisted, isProxy, isVerifiedSource };
+ const result = { isHoneypot, tax, note, blacklisted, isProxy, isVerifiedSource };
+
+ SECURITY_CACHE[cacheKey] = {
+ data: result,
+ expiry: now + CACHE_TTL
+ };
+
+ // prevent memory bloat
+ if (Object.keys(SECURITY_CACHE).length > 5000) {
+ delete SECURITY_CACHE[Object.keys(SECURITY_CACHE)[0]];
+ }
+
+ return result;
 }
 /**
  * Native Oracle: Restored Memory Safety cache
@@ -186,14 +209,30 @@ async function getLiveNativePrice(nativePriceId: string): Promise<number> {
 /**
  * Pricing Waterfall: Restored High-Liquidity Pairing + Redundant Oracles
  */
+
 export async function runPriceScan(address: string, symbol: string, chainId: number): Promise<{ price: number, liquidity: number }> {
+const cacheKey = `${chainId}:${address.toLowerCase()}`;
+const now = Date.now();
+
+if (PRICE_CACHE[cacheKey] && PRICE_CACHE[cacheKey].expiry > now) {
+return PRICE_CACHE[cacheKey].data;
+}
   const sym = (symbol || '').toLowerCase();
   const chain = getChainById(chainId);
   const stableAssets = ['usdc', 'usdt', 'dai', 'pyusd', 'usds', 'tusd'];
-  if (stableAssets.includes(sym)) return { price: 1, liquidity: 999999999 };
+  if (stableAssets.includes(sym)) {
+    const result = { price: 1, liquidity: 999999999 };
+    PRICE_CACHE[cacheKey] = { data: result, expiry: now + CACHE_TTL };
+    return result;
+    }
+  
   if (chain && sym === chain.symbol.toLowerCase()) {
     const price = await getLiveNativePrice(chain.nativePriceId);
-    if (price > 0) return { price, liquidity: 999999999 };
+  if (price > 0) {
+    const result = { price, liquidity: 999999999 };
+    PRICE_CACHE[cacheKey] = { data: result, expiry: now + CACHE_TTL };
+    return result;
+    }
   }
 
   const platform = CONFIG.CG_PLATFORM_MAP[String(chainId)] || 'ethereum';
@@ -213,19 +252,42 @@ export async function runPriceScan(address: string, symbol: string, chainId: num
       if (pair && pair.liquidity?.usd > CONFIG.LIQUIDITY_FLOOR) {
         price = parseFloat(pair.priceUsd);
         liquidity = pair.liquidity.usd;
-        return { price, liquidity };
+        const result = { price, liquidity };
+
+        PRICE_CACHE[cacheKey] = {
+        data: result,
+        expiry: now + CACHE_TTL
+        };
+
+        return result;
       }
     }
 
     if (llamaRes.status === 'fulfilled' && llamaRes.value?.coins) {
       price = llamaRes.value.coins[`${platform}:${address}`]?.price || 0;
-      if (price > 0) return { price, liquidity: 0 };
+     if (price > 0) {
+      const result = { price, liquidity: 0 };
+      PRICE_CACHE[cacheKey] = { data: result, expiry: now + CACHE_TTL };
+      return result;
+     }
     }
   } catch (e) { logger.warn(`[Aegis-Price] Trace failed for ${symbol}`);
    } finally {
    releaseApiSlot();
    }
-  return { price: 0, liquidity: 0 };
+  const result = { price: 0, liquidity: 0 };
+
+  PRICE_CACHE[cacheKey] = {
+  data: result,
+  expiry: now + CACHE_TTL
+  };
+
+  // prevent memory bloat
+  if (Object.keys(PRICE_CACHE).length > 5000) {
+  delete PRICE_CACHE[Object.keys(PRICE_CACHE)[0]];
+  }
+
+  return result;
 }
 
 /**
