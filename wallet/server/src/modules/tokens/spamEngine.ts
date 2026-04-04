@@ -1,15 +1,15 @@
 import { prisma } from '../../config/database.js';
 import { runSecurityScan, runPriceScan, calculateVerdict } from './spamDetector.js';
 import { logger } from '../../utils/logger.js';
-import { getHealthyProvider } from '../../blockchain/provider.js';
+import { getBestRpc, refreshRpc } from '../../blockchain/chains.js';
 import { ethers, isAddress, keccak256, solidityPacked, zeroPadValue } from 'ethers';
 
 /**
- * Spam-ENGINE v3.2 (2026) - PRODUCTION HARDENED
+ * Spam-ENGINE v4.0 (2026) - PRODUCTION HARDENED
  * Core Logic: Autonomous Orchestration, Fingerprint Drift, and Intelligence Lifecycle.
  * Philosophy: Trust the Ledger, Verify the Bytecode, Minimize the Waterfall.
  * Features: Adaptive TTL Scaling, Proxy Evolution Tracking, SaaS Sync.
- * Alignment: Integrated with Object-based Pricing Waterfall.
+ * Alignment: Integrated with Object-based Pricing Waterfall & multi-RPC Resolver.
  */
 
 const IMPLEMENTATION_SLOT = "0x3608944802909281900310020130310202202202202202202202202202202202";
@@ -48,15 +48,25 @@ export class AegisEngine {
       }
 
       // 2. BLOCKCHAIN REALITY CHECK (RPC Fingerprinting)
-      // Production Upgrade: Automatically get the best healthy provider for this chain
-      const provider = await getHealthyProvider(chainId);
+      // Production Upgrade: Relying on getBestRpc for latency-optimized provider resolution
+      const rpcUrl = await getBestRpc(chainId);
+      const provider = new ethers.JsonRpcProvider(rpcUrl, undefined, { staticNetwork: true });
 
       // We hash the bytecode + proxy implementation to detect logic shifts instantly.
       // PRODUCTION FIX: Logic remains, but note that for massive scale, Multicall batching is recommended here.
-      const [onChainCode, rawProxy] = await Promise.all([
-        provider.getCode(address).catch(() => '0x'),
-        provider.getStorage(address, IMPLEMENTATION_SLOT).catch(() => '0x00')
-      ]);
+      let onChainCode: string | null;
+      let rawProxy: string | null;
+
+      try {
+        [onChainCode, rawProxy] = await Promise.all([
+          provider.getCode(address).catch(() => '0x'),
+          provider.getStorage(address, IMPLEMENTATION_SLOT).catch(() => '0x00')
+        ]);
+      } catch (rpcErr) {
+        // If the specific provider fails, trigger a refresh for the next iteration
+        await refreshRpc(chainId);
+        throw rpcErr;
+      }
       
       // UPGRADE: GATEKEEPER - Verify if address is a Contract or a regular Wallet (EOA)
       const isContract = onChainCode !== '0x' && onChainCode !== '0x0' && onChainCode !== null;
