@@ -5,7 +5,7 @@ import { getBestRpc, refreshRpc } from '../../blockchain/chains.js';
 import { ethers, isAddress, keccak256, solidityPacked, zeroPadValue } from 'ethers';
 
 /**
- * Spam-ENGINE v4.0 (2026) - PRODUCTION HARDENED
+ * Spam-ENGINE v1.1
  * Core Logic: Autonomous Orchestration, Fingerprint Drift, and Intelligence Lifecycle.
  * Philosophy: Trust the Ledger, Verify the Bytecode, Minimize the Waterfall.
  * Features: Adaptive TTL Scaling, Proxy Evolution Tracking, SaaS Sync.

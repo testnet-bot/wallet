@@ -9,6 +9,24 @@ import unidecode from 'unidecode';
  * Core Logic: High-Fidelity Security Analytics & Pricing Waterfall
  * Status: Production-Hardened with Multi-Provider Redundancy & WAF-Shielding
  */
+const API_CONCURRENCY = 5; // max parallel external API calls
+let activeApiCalls = 0;
+const apiQueue: (() => void)[] = [];
+
+async function acquireApiSlot() {
+if (activeApiCalls >= API_CONCURRENCY) {
+await new Promise<void>(resolve => apiQueue.push(resolve));
+}
+activeApiCalls++;
+}
+
+function releaseApiSlot() {
+activeApiCalls--;
+if (apiQueue.length > 0) {
+const next = apiQueue.shift();
+if (next) next();
+}
+}
 
 // FIX TS(2351): Safe constructor resolution for Decimal.js across ESM/CJS
 const Decimal = (DecimalModule as any).default || DecimalModule;
@@ -106,6 +124,7 @@ export async function runSecurityScan(address: string, chainId: number) {
     const hpUrl = `https://honeypot.is{address}${chainId ? `&chainID=${chainId}` : ''}`;
     
     // CONSENSUS: GoPlus (Static) + Honeypot.is (Simulation)
+    await acquireApiSlot();
     const results = await Promise.allSettled([
       fetch(hpUrl, { signal: AbortSignal.timeout(8000) }).then(r => r.json()),
       fetch(`${CONFIG.GOPLUS_API}/api/v1/token_security/${chainId}?contract_addresses=${address}`, {
@@ -139,7 +158,10 @@ export async function runSecurityScan(address: string, chainId: number) {
     } else if (isHoneypot) {
       note = note === 'Analyzed Clean' ? '🚨 HONEYPOT DETECTED (PROVIDER_FAILOVER)' : note;
     }
-  } catch (e) { logger.error(`[Aegis-Scan] Waterfall partial failure for ${address}`); }
+  } catch (e) { logger.error(`[Aegis-Scan] Waterfall partial failure for ${address}`); 
+} finally {
+releaseApiSlot();
+}
 
   return { isHoneypot, tax, note, blacklisted, isProxy, isVerifiedSource };
 }
@@ -176,6 +198,7 @@ export async function runPriceScan(address: string, symbol: string, chainId: num
 
   const platform = CONFIG.CG_PLATFORM_MAP[String(chainId)] || 'ethereum';
   try {
+    await acquireApiSlot();
     const [dexRes, llamaRes] = await Promise.allSettled([
       fetch(`${CONFIG.DEXSCREENER_API}/${address}`, { signal: AbortSignal.timeout(6000) }).then(r => r.json()),
       fetch(`${CONFIG.LLAMA_API}/${platform}:${address}`, { signal: AbortSignal.timeout(5000) }).then(safeJson)
@@ -198,7 +221,10 @@ export async function runPriceScan(address: string, symbol: string, chainId: num
       price = llamaRes.value.coins[`${platform}:${address}`]?.price || 0;
       if (price > 0) return { price, liquidity: 0 };
     }
-  } catch (e) { logger.warn(`[Aegis-Price] Trace failed for ${symbol}`); }
+  } catch (e) { logger.warn(`[Aegis-Price] Trace failed for ${symbol}`);
+   } finally {
+   releaseApiSlot();
+   }
   return { price: 0, liquidity: 0 };
 }
 
